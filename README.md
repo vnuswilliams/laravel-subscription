@@ -6,59 +6,62 @@
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-blue?style=flat-square)](https://php.net)
 [![Laravel](https://img.shields.io/badge/Laravel-11%20|%2012%20|%2013-red?style=flat-square)](https://laravel.com)
 
-Un package Laravel robuste, fluide et **entièrement agnostique au paiement** pour gérer les plans d’abonnement, les cycles de vie (essai, grâce, annulation) et les quotas de fonctionnalités consommables.
+A robust, fluent, and **fully payment-agnostic** Laravel package for managing subscription plans, lifecycle states (trial, grace period, cancellation), and consumable feature quotas.
 
-Ce package ne traite aucun paiement. Il gère exclusivement **la logique métier de l’abonnement** : qui a accès à quoi, pendant combien de temps, et combien lui reste-t-il. Vous branchez le système de paiement de votre choix (Stripe, Paystack, Flutterwave, PayPal…) autour.
+This package does not handle any payments. It exclusively manages **subscription business logic**: who has access to what, for how long, and how much they have left. You plug in the payment provider of your choice (Stripe, Paystack, Flutterwave, PayPal…) around it.
 
------
 
-## Sommaire
+This documentation is always release in [french version](readmefr.md).
+
+---
+
+## Table of Contents
 
 1. [Architecture](#architecture)
 1. [Installation](#installation)
-1. [Configuration des plans en base](#configuration-des-plans-en-base)
-1. [Préparer le modèle souscripteur](#préparer-le-modèle-souscripteur)
-1. [Points d’entrée : trois façons d’utiliser le package](#points-dentrée--trois-façons-dutiliser-le-package)
-1. [Gestion des abonnements](#gestion-des-abonnements)
+1. [Configuring Plans in the Database](#configuring-plans-in-the-database)
+1. [Preparing the Subscriber Model](#preparing-the-subscriber-model)
+1. [Entry Points: Three Ways to Use the Package](#entry-points-three-ways-to-use-the-package)
+1. [Managing Subscriptions](#managing-subscriptions)
 1. [Features & Quotas](#features--quotas)
-1. [Cycle de vie & Période de grâce](#cycle-de-vie--période-de-grâce)
-1. [Middleware de protection des routes](#middleware-de-protection-des-routes)
-1. [Événements Laravel](#événements-laravel)
-1. [Commande Artisan](#commande-artisan)
-1. [Recette complète : service applicatif](#recette-complète--service-applicatif)
-1. [Référence API](#référence-api)
-1. [Conseils & Bonnes pratiques](#conseils--bonnes-pratiques)
+1. [Lifecycle & Grace Period](#lifecycle--grace-period)
+1. [Route Protection Middleware](#route-protection-middleware)
+1. [Laravel Events](#laravel-events)
+1. [Artisan Command](#artisan-command)
+1. [Full Recipe: Application Service](#full-recipe-application-service)
+1. [API Reference](#api-reference)
+1. [Tips & Best Practices](#tips--best-practices)
 
------
+---
 
 ## Architecture
 
-Le package repose sur une séparation stricte des responsabilités :
+The package is built on a strict separation of concerns:
 
 ```
-SubscriptionManager          ← Point d'entrée public (Facade ou injection)
+SubscriptionManager          ← Public entry point (Facade or injection)
     │
-    ├── SubscriptionService  ← Logique : subscribeTo, cancel, switchTo, renew…
-    └── FeatureService       ← Logique : canConsume, consume, release, balance…
+    ├── SubscriptionService  ← Logic: subscribeTo, cancel, switchTo, renew…
+    └── FeatureService       ← Logic: canConsume, consume, release, balance…
 
-HasSubscriptions (Trait)     ← Proxy ergonomique sur le modèle Eloquent
+HasSubscriptions (Trait)     ← Ergonomic proxy on the Eloquent model
 ```
 
-**Règle d’or :** le trait `HasSubscriptions` ne contient aucune logique métier. Il délègue tout au `SubscriptionManager`. Ainsi, la logique reste testable, injectable et indépendante de l’Eloquent model.
+**Golden rule:** the `HasSubscriptions` trait contains no business logic. It delegates everything to the `SubscriptionManager`. This keeps the logic testable, injectable, and independent of the Eloquent model.
 
------
+---
 
 ## Installation
 
-### 1. Installer via Composer
+### 1. Install via Composer
 
 ```bash
 composer require vnuswilliams/laravel-subscription
 ```
 
-Le `ServiceProvider` et la `Facade` sont auto-découverts par Laravel. Aucune déclaration manuelle nécessaire.
+The `ServiceProvider` and `Facade` are auto-discovered by Laravel. No manual registration needed.
 
-### 2. Publier la configuration et les migrations
+### 2. Publish the configuration and migrations
 
 ```bash
 # Configuration
@@ -67,25 +70,25 @@ php artisan vendor:publish --tag=subscription-config
 # Migrations
 php artisan vendor:publish --tag=subscription-migrations
 
-# Lancer les migrations
+# Run migrations
 php artisan migrate
 ```
 
-### 3. (Optionnel) Publier le service applicatif stub
+### 3. (Optional) Publish the application service stub
 
 ```bash
 php artisan vendor:publish --tag=subscription-stubs
 ```
 
-Cette commande copie `app/Services/SubscriptionService.php` dans votre projet — un service pré-rempli adapté à votre domaine métier (voir section [Recette complète](#recette-complète--service-applicatif)).
+This copies `app/Services/SubscriptionService.php` into your project — a pre-filled service tailored to your business domain (see the [Full Recipe](#full-recipe-application-service) section).
 
------
+---
 
-## Configuration des plans en base
+## Configuring Plans in the Database
 
-Le package ne crée pas vos plans automatiquement. Vous les insérez via un seeder, une migration ou l’interface d’administration de votre application.
+The package does not create your plans automatically. You insert them via a seeder, a migration, or your application's admin interface.
 
-Voici la structure attendue pour un plan mensuel avec features :
+Here is the expected structure for a monthly plan with features:
 
 ```php
 // database/seeders/PlanSeeder.php
@@ -94,11 +97,11 @@ use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Enums\FeatureType;
 use Vnuswilliams\Subscription\Enums\PeriodicityType;
 
-// Plan Pro — mensuel, 7 jours de grâce
+// Pro Plan — monthly, 7-day grace period
 $pro = Plan::create([
     'name'             => 'Pro',
     'slug'             => 'pro',
-    'description'      => 'Pour les équipes en croissance.',
+    'description'      => 'For growing teams.',
     'periodicity_type' => PeriodicityType::Month->value,  // 'month'
     'periodicity'      => 1,
     'trial_days'       => 0,
@@ -106,27 +109,27 @@ $pro = Plan::create([
     'is_active'        => true,
 ]);
 
-// Feature consumable : quota d'employés
+// Consumable feature: employee quota
 $pro->features()->create([
     'slug'    => 'max-employees',
-    'name'    => "Nombre d'employés",
+    'name'    => 'Number of employees',
     'type'    => FeatureType::Consumable->value,  // 'consumable'
-    'charges' => 25,  // 25 slots disponibles
+    'charges' => 25,  // 25 available slots
 ]);
 
-// Feature booléenne : accès à l'espace collaborateur
+// Boolean feature: access to the employee portal
 $pro->features()->create([
-    'slug'    => 'espace-collaborateur',
-    'name'    => 'Espace collaborateur',
+    'slug'    => 'employee-portal',
+    'name'    => 'Employee Portal',
     'type'    => FeatureType::Boolean->value,  // 'boolean'
-    'charges' => null,  // null = illimité / pas de compteur
+    'charges' => null,  // null = unlimited / no counter
 ]);
 
-// Plan Gratuit — permanent (pas de periodicity), essai 15 jours
+// Free Plan — permanent (no periodicity), 15-day trial
 Plan::create([
-    'name'             => 'Gratuit',
+    'name'             => 'Free',
     'slug'             => 'free',
-    'periodicity_type' => null,   // null = plan permanent, ne expire jamais
+    'periodicity_type' => null,   // null = permanent plan, never expires
     'periodicity'      => null,
     'trial_days'       => 15,
     'grace_days'       => 0,
@@ -134,25 +137,25 @@ Plan::create([
 ]);
 ```
 
-> **Conseil :** centralisez tous les slugs de features dans un `FeatureEnum` dans votre application. Vous éviterez les fautes de frappe et bénéficierez de l’autocomplétion IDE.
+> **Tip:** centralise all your feature slugs in a `FeatureEnum` in your application. This prevents typos and gives you IDE autocompletion.
 
 ```php
 // app/Enums/FeatureEnum.php
 enum FeatureEnum: string
 {
-    case MAX_EMPLOYEES        = 'max-employees';
-    case ESPACE_COLLABORATEUR = 'espace-collaborateur';
-    case DOCUMENTS            = 'documents';
-    case RAPPORTS_AVANCES     = 'rapports-avances';
-    case SUPPORT_PRIORITAIRE  = 'support-prioritaire';
+    case MAX_EMPLOYEES    = 'max-employees';
+    case EMPLOYEE_PORTAL  = 'employee-portal';
+    case DOCUMENTS        = 'documents';
+    case ADVANCED_REPORTS = 'advanced-reports';
+    case PRIORITY_SUPPORT = 'priority-support';
 }
 ```
 
------
+---
 
-## Préparer le modèle souscripteur
+## Preparing the Subscriber Model
 
-Ajoutez le trait `HasSubscriptions` sur n’importe quel modèle Eloquent qui doit pouvoir souscrire à un plan : `User`, `Company`, `Team`, `Organization`…
+Add the `HasSubscriptions` trait to any Eloquent model that needs to subscribe to a plan: `User`, `Company`, `Team`, `Organization`…
 
 ```php
 // app/Models/Company.php
@@ -168,17 +171,17 @@ class Company extends Model
 }
 ```
 
-C’est tout. Le trait expose automatiquement la relation `subscription()` et toutes les méthodes fluides du package directement sur votre modèle.
+That's it. The trait automatically exposes the `subscription()` relationship and all of the package's fluent methods directly on your model.
 
------
+---
 
-## Points d’entrée : trois façons d’utiliser le package
+## Entry Points: Three Ways to Use the Package
 
-Le package expose trois interfaces selon le contexte d’utilisation. Choisissez celle qui correspond à votre situation.
+The package exposes three interfaces depending on your context. Choose the one that fits your situation.
 
-### 1. Via le Trait (sur le modèle)
+### 1. Via the Trait (on the model)
 
-La syntaxe la plus fluide pour des appels ponctuels directement sur l’instance Eloquent :
+The most fluent syntax for one-off calls directly on the Eloquent instance:
 
 ```php
 $company->subscribeTo('pro');
@@ -187,11 +190,11 @@ $company->canConsume('max-employees', 1);
 $company->balance('max-employees');
 ```
 
-Idéal dans les Observers, les Policies, ou les vérifications rapides dans un Controller.
+Ideal in Observers, Policies, or quick checks inside a Controller.
 
-### 2. Via la Facade (n’importe où dans l’app)
+### 2. Via the Facade (anywhere in the app)
 
-La syntaxe statique Laravel-style, accessible partout sans injection :
+The Laravel-style static syntax, accessible everywhere without injection:
 
 ```php
 use Vnuswilliams\Subscription\Facades\Subscription;
@@ -202,11 +205,11 @@ Subscription::canConsume($company, 'max-employees', 1);
 Subscription::balance($company, 'max-employees');
 ```
 
-Idéal dans les Controllers, les Actions, les Jobs ou les Listeners.
+Ideal in Controllers, Actions, Jobs, or Listeners.
 
-### 3. Via l’injection du SubscriptionManager (dans vos services)
+### 3. Via SubscriptionManager injection (in your services)
 
-La méthode recommandée pour la logique métier complexe. Pleinement testable, sans dépendance statique :
+The recommended approach for complex business logic. Fully testable, with no static dependency:
 
 ```php
 use Vnuswilliams\Subscription\SubscriptionManager;
@@ -225,191 +228,191 @@ class SubscriptionService
 }
 ```
 
-> **Conseil :** dans un service applicatif dédié aux abonnements, préférez toujours l’injection directe. La Facade est pratique pour des appels isolés, mais elle rend le code plus difficile à tester unitairement.
+> **Tip:** in a dedicated subscription service, always prefer direct injection. The Facade is handy for isolated calls, but makes unit testing harder.
 
------
+---
 
-## Gestion des abonnements
+## Managing Subscriptions
 
-### Souscrire à un plan
+### Subscribing to a plan
 
-Passez le slug du plan (string) ou directement une instance `Plan` :
+Pass the plan slug (string) or a `Plan` instance directly:
 
 ```php
-// Par slug
+// By slug
 $company->subscribeTo('pro');
 
-// Par instance
+// By instance
 $plan = Plan::where('slug', 'pro')->firstOrFail();
 $company->subscribeTo($plan);
 
-// Via la Facade
+// Via the Facade
 use Vnuswilliams\Subscription\Facades\Subscription;
 Subscription::subscribeTo($company, 'pro');
 ```
 
-Si le plan a des `trial_days > 0`, le statut sera automatiquement `on_trial` et `trial_ends_at` sera calculé. Aucune action supplémentaire requise.
+If the plan has `trial_days > 0`, the status will automatically be set to `on_trial` and `trial_ends_at` will be calculated. No additional action required.
 
-### Souscrire avec une expiration personnalisée
+### Subscribing with a custom expiration
 
-Utile pour les plans gratuits ou les offres promotionnelles à durée fixe :
+Useful for free plans or fixed-duration promotional offers:
 
 ```php
-// Plan gratuit avec essai de 15 jours
+// Free plan with a 15-day trial
 $company->subscribeTo('free', expiration: now()->addDays(15));
 
-// Offre promotionnelle : 3 mois offerts
+// Promotional offer: 3 months free
 $company->subscribeTo('pro', expiration: now()->addMonths(3));
 ```
 
-### Changer de plan (upgrade / downgrade)
+### Switching plans (upgrade / downgrade)
 
 ```php
-// Changement immédiat : l'ancien abonnement est supprimé, le nouveau commence
+// Immediate switch: the old subscription is removed, the new one starts
 $company->switchTo('business');
 
-// Changement différé : l'ancien abonnement court jusqu'à son terme
+// Deferred switch: the old subscription runs until its end date
 $company->switchTo('starter', immediately: false);
 
-// Via la Facade
+// Via the Facade
 Subscription::switchTo($company, 'business');
 ```
 
-### Annuler un abonnement
+### Cancelling a subscription
 
-L’annulation **ne coupe pas l’accès immédiatement**. L’utilisateur conserve l’accès jusqu’à `ends_at`, puis la période de grâce s’active si configurée. C’est le comportement attendu pour une résiliation en fin de période.
+Cancellation **does not cut access immediately**. The user retains access until `ends_at`, then the grace period activates if configured. This is the expected behaviour for an end-of-period cancellation.
 
 ```php
 $company->subscription->cancel();
 
-// Ou via la Facade
+// Or via the Facade
 Subscription::cancel($company);
 ```
 
-Pour vérifier si un abonnement est annulé mais court encore :
+To check whether a subscription is cancelled but still running:
 
 ```php
 if ($company->subscription->isCanceled()) {
-    // L'utilisateur a résilié, mais a encore accès jusqu'à ends_at
+    // The user has cancelled, but still has access until ends_at
     $expiresAt = $company->subscriptionExpiresAt();
 }
 ```
 
-### Supprimer l’accès immédiatement
+### Revoking access immediately
 
-Pour couper l’accès sans attendre la fin de période (suspension pour non-paiement, violation des CGU, etc.) :
+To cut access without waiting for the end of the period (suspension for non-payment, terms of service violation, etc.):
 
 ```php
 $company->subscription->suppress();
 
-// Ou via la Facade
+// Or via the Facade
 Subscription::suppress($company);
 ```
 
-### Renouveler un abonnement
+### Renewing a subscription
 
-Relance un cycle complet depuis maintenant. Utile après un paiement réussi :
+Starts a full new cycle from now. Useful after a successful payment:
 
 ```php
 $company->renewSubscription();
 
-// Ou via la Facade
+// Or via the Facade
 Subscription::renew($company);
 ```
 
-### Vérifier l’état de l’abonnement
+### Checking subscription status
 
 ```php
-// L'abonnement est-il valide ? (actif, essai, ou en grâce)
+// Is the subscription valid? (active, on trial, or in grace period)
 $company->hasActiveSubscription(); // bool
 
-// Quel est le plan actuel ?
+// What is the current plan?
 $plan = $company->currentPlan(); // Plan|null
 echo $plan->name;  // 'Pro'
 echo $plan->slug;  // 'pro'
 
-// Quand expire-t-il ?
+// When does it expire?
 $date = $company->subscriptionExpiresAt(); // Carbon|null
 
-// Accès direct au modèle Subscription
+// Direct access to the Subscription model
 $sub = $company->subscription;
 $sub->isActive();        // bool
 $sub->isOnTrial();       // bool
 $sub->isOnGracePeriod(); // bool
 $sub->isCanceled();      // bool
 $sub->isExpired();       // bool
-$sub->hasAccess();       // bool — agrège tous les états valides
+$sub->hasAccess();       // bool — aggregates all valid states
 ```
 
------
+---
 
 ## Features & Quotas
 
-### Features booléennes (accès oui/non)
+### Boolean features (yes/no access)
 
-Une feature booléenne est simplement attachée ou non au plan. Si elle n’est pas dans la liste des features du plan, l’accès est refusé.
+A boolean feature is simply attached to a plan or not. If it is not in the plan's feature list, access is denied.
 
 ```php
-// L'entreprise a-t-elle accès à l'espace collaborateur ?
-if ($company->canConsume('espace-collaborateur')) {
-    // accès autorisé
+// Does the company have access to the employee portal?
+if ($company->canConsume('employee-portal')) {
+    // access granted
 }
 
-// Via la Facade
-if (Subscription::canConsume($company, 'espace-collaborateur')) {
-    // accès autorisé
+// Via the Facade
+if (Subscription::canConsume($company, 'employee-portal')) {
+    // access granted
 }
 ```
 
-> Pour une feature booléenne, le paramètre `$amount` est ignoré. `canConsume('feature', 0)` et `canConsume('feature', 1)` retournent le même résultat.
+> For a boolean feature, the `$amount` parameter is ignored. `canConsume('feature', 0)` and `canConsume('feature', 1)` return the same result.
 
-### Features consumables (quotas)
+### Consumable features (quotas)
 
-Le flux standard pour une feature à quota : vérifier → agir → consommer.
+The standard flow for a quota feature: check → act → consume.
 
 ```php
-// ✅ Pattern recommandé
+// ✅ Recommended pattern
 if ($company->canConsume('max-employees', 1)) {
 
-    // L'action métier d'abord
+    // Business action first
     $employee = Employee::create([...]);
 
-    // La consommation ensuite
+    // Consumption afterwards
     $company->consume('max-employees', 1);
 
 } else {
-    return back()->with('error', 'Quota d\'employés atteint. Passez à un plan supérieur.');
+    return back()->with('error', 'Employee quota reached. Please upgrade your plan.');
 }
 ```
 
-> **Important :** appelez toujours `canConsume()` avant `consume()`. Le package ne lève pas d’exception si vous consommez au-delà du quota — c’est à votre code de gérer cette garde.
+> **Important:** always call `canConsume()` before `consume()`. The package does not throw an exception if you consume beyond the quota — that guard is your responsibility.
 
-### Libérer un slot (décrémenter la consommation)
+### Releasing a slot (decrementing consumption)
 
-Quand vous supprimez une ressource, libérez le slot correspondant :
+When you delete a resource, release the corresponding slot:
 
 ```php
-// Suppression d'un employé → libère 1 slot
+// Deleting an employee → releases 1 slot
 $employee->delete();
 $company->release('max-employees', 1);
 ```
 
-`release()` décrémente `used` de manière sûre (jamais en dessous de 0). C’est plus fiable que de supprimer le dernier enregistrement de consommation.
+`release()` decrements `used` safely (never below 0). This is more reliable than deleting the last consumption record.
 
-### Consulter les quotas (pour les dashboards)
+### Inspecting quotas (for dashboards)
 
 ```php
-// Slots totaux alloués par le plan
-$total = $company->totalCharges('max-employees');  // ex: 25
+// Total slots allocated by the plan
+$total = $company->totalCharges('max-employees');  // e.g. 25
 
-// Slots consommés sur la période en cours
-$used = $company->usedCharges('max-employees');    // ex: 17
+// Slots consumed in the current period
+$used = $company->usedCharges('max-employees');    // e.g. 17
 
-// Slots restants (PHP_INT_MAX si illimité)
-$remaining = $company->balance('max-employees');   // ex: 8
+// Remaining slots (PHP_INT_MAX if unlimited)
+$remaining = $company->balance('max-employees');   // e.g. 8
 ```
 
-Exemple d’utilisation dans une vue Blade pour une barre de progression :
+Example usage in a Blade view for a progress bar:
 
 ```blade
 @php
@@ -422,84 +425,84 @@ Exemple d’utilisation dans une vue Blade pour une barre de progression :
 <div class="quota-bar">
     <div class="quota-bar__fill" style="width: {{ $percent }}%"></div>
 </div>
-<p>{{ $used }} / {{ $total }} employés — {{ $remaining }} slots restants</p>
+<p>{{ $used }} / {{ $total }} employees — {{ $remaining }} slots remaining</p>
 ```
 
------
+---
 
-## Cycle de vie & Période de grâce
+## Lifecycle & Grace Period
 
-Le cycle de vie complet d’un abonnement :
+The full lifecycle of a subscription:
 
 ```
-[on_trial] ──(trial_ends_at dépassé)──> [active]
-[active]   ──(ends_at dépassé)────────> [on_grace_period] ──(grace_ends_at dépassé)──> [expired]
-[active]   ──(cancel())───────────────> [canceled] (hasAccess() = true jusqu'à ends_at)
-[active]   ──(suppress())─────────────> [expired]  (hasAccess() = false immédiatement)
+[on_trial] ──(trial_ends_at passed)──> [active]
+[active]   ──(ends_at passed)────────> [on_grace_period] ──(grace_ends_at passed)──> [expired]
+[active]   ──(cancel())───────────────> [canceled] (hasAccess() = true until ends_at)
+[active]   ──(suppress())─────────────> [expired]  (hasAccess() = false immediately)
 ```
 
-La méthode `hasAccess()` est votre source de vérité. Elle retourne `true` pour les statuts `active`, `on_trial`, `on_grace_period` et `canceled` (si `ends_at` est dans le futur). Elle retourne `false` pour `expired` et les abonnements supprimés.
+The `hasAccess()` method is your single source of truth. It returns `true` for the `active`, `on_trial`, `on_grace_period`, and `canceled` (if `ends_at` is in the future) states. It returns `false` for `expired` and suppressed subscriptions.
 
-### Configurer la période de grâce par plan
+### Configuring the grace period per plan
 
-La grâce se configure dans les données du plan (colonne `grace_days`). Aucune configuration globale n’est requise. Chaque plan peut avoir sa propre durée :
+The grace period is configured in the plan data (`grace_days` column). No global configuration is required. Each plan can have its own duration:
 
 ```php
 Plan::create([
     'slug'       => 'pro',
-    'grace_days' => 7,   // 7 jours de grâce après expiration
+    'grace_days' => 7,   // 7-day grace period after expiration
     // ...
 ]);
 
 Plan::create([
     'slug'       => 'free',
-    'grace_days' => 0,   // Pas de grâce sur le plan gratuit
+    'grace_days' => 0,   // No grace period on the free plan
     // ...
 ]);
 ```
 
------
+---
 
-## Middleware de protection des routes
+## Route Protection Middleware
 
-Le package enregistre automatiquement le middleware `subscribed`. Utilisez-le dans vos fichiers de routes :
+The package automatically registers the `subscribed` middleware. Use it in your route files:
 
 ```php
 // routes/web.php
 
-// Exige n'importe quel abonnement valide
+// Requires any valid subscription
 Route::middleware(['auth', 'subscribed'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/employees', [EmployeeController::class, 'index']);
 });
 
-// Exige un plan spécifique (par slug)
+// Requires a specific plan (by slug)
 Route::middleware(['auth', 'subscribed:business'])->group(function () {
     Route::get('/analytics', [AnalyticsController::class, 'index']);
     Route::get('/support', [SupportController::class, 'index']);
 });
 ```
 
-En cas de refus, le middleware retourne :
+When access is denied, the middleware returns:
 
-- **JSON 403** si la requête attend du JSON (`Accept: application/json`)
-- **Redirect** vers `home` avec un message `error` en session sinon
+- A **JSON 403** if the request expects JSON (`Accept: application/json`)
+- A **redirect** to `home` with an `error` flash message otherwise
 
-Pour personnaliser ce comportement, étendez `CheckSubscription` et rebindez-le dans votre `AppServiceProvider`.
+To customise this behaviour, extend `CheckSubscription` and rebind it in your `AppServiceProvider`.
 
------
+---
 
-## Événements Laravel
+## Laravel Events
 
-Le package émet des événements natifs Laravel à chaque transition de cycle de vie. Branchez vos listeners dans `EventServiceProvider` ou avec les attributs `#[AsEventListener]` de Laravel 11+.
+The package dispatches native Laravel events on every lifecycle transition. Register your listeners in `EventServiceProvider` or using Laravel 11+ `#[AsEventListener]` attributes.
 
-|Événement                       |Déclenchement                      |Utilisation typique                        |
-|--------------------------------|-----------------------------------|-------------------------------------------|
-|`SubscriptionCreated`           |Nouvel abonnement créé             |Email de bienvenue, activation des accès   |
-|`SubscriptionCanceled`          |Abonnement résilié (fin de période)|Email de rétention, questionnaire de départ|
-|`SubscriptionEnteredGracePeriod`|Expiration + grâce activée         |Email de relance de paiement urgent        |
-|`SubscriptionExpired`           |Grâce terminée, accès coupé        |Suspension, notification, archivage        |
-|`FeatureQuotaReached`           |Quota d’une feature épuisé         |Notification upsell, alerte admin          |
+| Event                          | Triggered when                        | Typical use case                              |
+|--------------------------------|---------------------------------------|-----------------------------------------------|
+| `SubscriptionCreated`          | A new subscription is created         | Welcome email, access activation              |
+| `SubscriptionCanceled`         | Subscription cancelled (end of period)| Retention email, exit survey                  |
+| `SubscriptionEnteredGracePeriod` | Expiration reached, grace activated | Urgent payment reminder email                 |
+| `SubscriptionExpired`          | Grace period over, access cut         | Suspension, notification, archiving           |
+| `FeatureQuotaReached`          | A feature quota is exhausted          | Upsell notification, admin alert              |
 
 ```php
 // app/Listeners/SendWelcomeEmail.php
@@ -511,7 +514,7 @@ class SendWelcomeEmail
     public function handle(SubscriptionCreated $event): void
     {
         $subscriber = $event->subscription->subscriber;
-        // $subscriber est l'instance Company, User, etc.
+        // $subscriber is the Company, User, etc. instance
 
         Mail::to($subscriber->email)->send(new WelcomeMail($subscriber));
     }
@@ -528,28 +531,28 @@ class NotifyQuotaExhausted
     public function handle(FeatureQuotaReached $event): void
     {
         $subscriber  = $event->subscription->subscriber;
-        $featureSlug = $event->feature->slug;  // ex: 'max-employees'
+        $featureSlug = $event->feature->slug;  // e.g. 'max-employees'
 
-        // Envoyer une notification suggérant un upgrade
+        // Send a notification suggesting an upgrade
         $subscriber->notify(new QuotaReachedNotification($featureSlug));
     }
 }
 ```
 
------
+---
 
-## Commande Artisan
+## Artisan Command
 
-La commande `subscription:check-lifecycle` parcourt tous les abonnements en base et effectue les transitions de statut manquantes (active → on_grace_period → expired).
+The `subscription:check-lifecycle` command iterates over all subscriptions in the database and performs any missing status transitions (active → on_grace_period → expired).
 
-Elle est utile pour les utilisateurs qui ne se reconnectent pas souvent : leur abonnement passera en grâce ou expirera même sans qu’ils fassent de requête, et les événements seront émis correctement.
+It is useful for users who do not log in often: their subscription will move to grace or expire even without an incoming request, and the relevant events will be dispatched correctly.
 
 ```bash
-# Exécution manuelle
+# Manual execution
 php artisan subscription:check-lifecycle
 ```
 
-Planifiez-la quotidiennement dans `routes/console.php` (Laravel 11+) :
+Schedule it to run daily in `routes/console.php` (Laravel 11+):
 
 ```php
 // routes/console.php
@@ -559,7 +562,7 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('subscription:check-lifecycle')->daily();
 ```
 
-Ou dans `app/Console/Kernel.php` (Laravel 10 et antérieur) :
+Or in `app/Console/Kernel.php` (Laravel 10 and earlier):
 
 ```php
 protected function schedule(Schedule $schedule): void
@@ -568,17 +571,17 @@ protected function schedule(Schedule $schedule): void
 }
 ```
 
------
+---
 
-## Recette complète : service applicatif
+## Full Recipe: Application Service
 
-Publiez le stub fourni par le package, puis adaptez-le à votre domaine :
+Publish the stub provided by the package, then adapt it to your domain:
 
 ```bash
 php artisan vendor:publish --tag=subscription-stubs
 ```
 
-Cela génère `app/Services/SubscriptionService.php`. Voici ce qu’il contient et comment l’utiliser :
+This generates `app/Services/SubscriptionService.php`. Here is what it contains and how to use it:
 
 ```php
 // app/Services/SubscriptionService.php
@@ -595,8 +598,8 @@ final class SubscriptionService
     {
         $plan = $this->subscription->resolvePlan($planEnum->value);
 
-        // Logique métier spécifique à votre app :
-        // le plan FREE bénéficie d'un essai manuel de 15 jours
+        // App-specific business logic:
+        // the FREE plan gets a manual 15-day trial
         if ($planEnum === PlanEnum::FREE) {
             return $this->subscription->subscribeTo($company, $plan, expiration: now()->addDays(15));
         }
@@ -634,7 +637,7 @@ final class SubscriptionService
 }
 ```
 
-Utilisation dans un Controller :
+Usage in a Controller:
 
 ```php
 // app/Http/Controllers/EmployeeController.php
@@ -650,7 +653,7 @@ class EmployeeController extends Controller
         $company = $request->user()->company;
 
         if (! $this->subscriptionService->canAddEmployee($company)) {
-            return back()->with('error', 'Quota d\'employés atteint.');
+            return back()->with('error', 'Employee quota reached.');
         }
 
         $employee = Employee::create($request->validated());
@@ -658,7 +661,7 @@ class EmployeeController extends Controller
         $this->subscriptionService->consumeEmployeeSlot($company);
 
         return redirect()->route('employees.index')
-            ->with('success', 'Employé ajouté avec succès.');
+            ->with('success', 'Employee added successfully.');
     }
 
     public function destroy(Employee $employee): RedirectResponse
@@ -667,53 +670,53 @@ class EmployeeController extends Controller
 
         $employee->delete();
 
-        // Libère le slot pour qu'il soit réutilisable
+        // Release the slot so it can be reused
         $this->subscriptionService->releaseEmployeeSlot($company);
 
         return redirect()->route('employees.index')
-            ->with('success', 'Employé supprimé.');
+            ->with('success', 'Employee deleted.');
     }
 }
 ```
 
------
+---
 
-## Référence API
+## API Reference
 
-### Trait `HasSubscriptions`
+### `HasSubscriptions` Trait
 
-|Méthode                                        |Retour             |Description                                    |
-|-----------------------------------------------|-------------------|-----------------------------------------------|
-|`subscription()`                               |`MorphOne`         |Relation Eloquent vers le dernier abonnement   |
-|`subscribeTo($plan, $expiration, $immediately)`|`Subscription`     |Souscrit ou switch si abonnement actif existant|
-|`switchTo($plan, $immediately)`                |`Subscription`     |Change de plan                                 |
-|`renewSubscription()`                          |`Subscription`     |Renouvelle depuis maintenant                   |
-|`hasActiveSubscription()`                      |`bool`             |Abonnement valide ? (actif, essai, grâce)      |
-|`currentPlan()`                                |`Plan|null`        |Plan actuel                                    |
-|`subscriptionExpiresAt()`                      |`Carbon|null`      |Date d’expiration                              |
-|`canConsume($slug, $amount)`                   |`bool`             |Quota ou accès booléen disponible ?            |
-|`consume($slug, $amount)`                      |`SubscriptionUsage`|Consomme $amount unités                        |
-|`release($slug, $amount)`                      |`SubscriptionUsage`|Libère $amount unités                          |
-|`balance($slug)`                               |`int`              |Solde restant (PHP_INT_MAX si illimité)        |
-|`totalCharges($slug)`                          |`int`              |Total alloué par le plan                       |
-|`usedCharges($slug)`                           |`int`              |Quantité consommée                             |
+| Method                                         | Return             | Description                                       |
+|------------------------------------------------|--------------------|---------------------------------------------------|
+| `subscription()`                               | `MorphOne`         | Eloquent relationship to the latest subscription  |
+| `subscribeTo($plan, $expiration, $immediately)`| `Subscription`     | Subscribes or switches if an active subscription exists |
+| `switchTo($plan, $immediately)`                | `Subscription`     | Switches plan                                     |
+| `renewSubscription()`                          | `Subscription`     | Renews from now                                   |
+| `hasActiveSubscription()`                      | `bool`             | Is the subscription valid? (active, trial, grace) |
+| `currentPlan()`                                | `Plan\|null`       | Current plan                                      |
+| `subscriptionExpiresAt()`                      | `Carbon\|null`     | Expiration date                                   |
+| `canConsume($slug, $amount)`                   | `bool`             | Quota or boolean access available?                |
+| `consume($slug, $amount)`                      | `SubscriptionUsage`| Consumes $amount units                            |
+| `release($slug, $amount)`                      | `SubscriptionUsage`| Releases $amount units                            |
+| `balance($slug)`                               | `int`              | Remaining balance (PHP_INT_MAX if unlimited)      |
+| `totalCharges($slug)`                          | `int`              | Total allocated by the plan                       |
+| `usedCharges($slug)`                           | `int`              | Amount consumed                                   |
 
-### Modèle `Subscription`
+### `Subscription` Model
 
-|Méthode            |Retour  |Description                           |
-|-------------------|--------|--------------------------------------|
-|`isActive()`       |`bool`  |Statut active ET ends_at dans le futur|
-|`isOnTrial()`      |`bool`  |trial_ends_at dans le futur           |
-|`isOnGracePeriod()`|`bool`  |Dans la fenêtre de grâce              |
-|`isCanceled()`     |`bool`  |Résilié (accès encore possible)       |
-|`isSuppressed()`   |`bool`  |Supprimé immédiatement                |
-|`isExpired()`      |`bool`  |Plus aucun accès                      |
-|`hasAccess()`      |`bool`  |Source de vérité globale              |
-|`cancel()`         |`static`|Annulation fin de période             |
-|`suppress()`       |`static`|Coupure immédiate                     |
-|`renew()`          |`static`|Renouvellement depuis maintenant      |
+| Method              | Return   | Description                              |
+|---------------------|----------|------------------------------------------|
+| `isActive()`        | `bool`   | Status is active AND ends_at is in the future |
+| `isOnTrial()`       | `bool`   | trial_ends_at is in the future           |
+| `isOnGracePeriod()` | `bool`   | Within the grace window                  |
+| `isCanceled()`      | `bool`   | Cancelled (access may still be available)|
+| `isSuppressed()`    | `bool`   | Immediately revoked                      |
+| `isExpired()`       | `bool`   | No access remaining                      |
+| `hasAccess()`       | `bool`   | Global source of truth                   |
+| `cancel()`          | `static` | End-of-period cancellation               |
+| `suppress()`        | `static` | Immediate access revocation              |
+| `renew()`           | `static` | Renewal from now                         |
 
-### Enums disponibles
+### Available Enums
 
 ```php
 use Vnuswilliams\Subscription\Enums\SubscriptionStatus;
@@ -735,21 +738,21 @@ SubscriptionStatus::Canceled;      // 'canceled'
 SubscriptionStatus::Expired;       // 'expired'
 ```
 
------
+---
 
-## Conseils & Bonnes pratiques
+## Tips & Best Practices
 
-**Centralisez vos slugs de features dans un enum.** Une faute de frappe dans `'max-employes'` au lieu de `'max-employees'` retourne silencieusement `false`. Un `FeatureEnum::MAX_EMPLOYEES->value` ne se trompe jamais.
+**Centralise your feature slugs in an enum.** A typo like `'max-employes'` instead of `'max-employees'` silently returns `false`. `FeatureEnum::MAX_EMPLOYEES->value` never makes that mistake.
 
-**Toujours vérifier avant de consommer.** Le package ne lève pas d’exception si vous appelez `consume()` alors que le quota est épuisé. La garde `canConsume()` est de votre responsabilité.
+**Always check before consuming.** The package does not throw an exception if you call `consume()` when the quota is exhausted. The `canConsume()` guard is your responsibility.
 
-**Utilisez `release()` à la suppression des ressources.** Si un utilisateur supprime un employé, libérez le slot. Sinon le compteur reste faussé et l’utilisateur perd une capacité qu’il devrait récupérer.
+**Use `release()` when deleting resources.** If a user deletes an employee, release the slot. Otherwise the counter stays inflated and the user loses capacity they should get back.
 
-**Ne pas confondre `cancel()` et `suppress()`.** `cancel()` est la résiliation normale — l’accès est maintenu jusqu’à la fin de la période payée. `suppress()` est la suspension punitive ou administrative — l’accès est coupé immédiatement.
+**Do not confuse `cancel()` and `suppress()`.** `cancel()` is a normal cancellation — access is maintained until the end of the paid period. `suppress()` is an administrative or punitive suspension — access is cut immediately.
 
-**Injectez `SubscriptionManager` dans vos services, utilisez la Facade dans vos controllers.** Les services ont besoin d’être testables unitairement — évitez la Facade dans les classes que vous testez avec `pest` ou `phpunit`. Dans un Controller ou un Livewire component, la Facade est parfaitement adaptée.
+**Inject `SubscriptionManager` in your services, use the Facade in your controllers.** Services need to be unit-testable — avoid the Facade in classes you test with `pest` or `phpunit`. In a Controller or a Livewire component, the Facade is perfectly appropriate.
 
-**Gérez les exceptions.** Le package lève des exceptions typées sur les cas d’erreur :
+**Handle exceptions.** The package throws typed exceptions for error cases:
 
 ```php
 use Vnuswilliams\Subscription\Exceptions\InvalidPlanException;
@@ -757,18 +760,17 @@ use Vnuswilliams\Subscription\Exceptions\SubscriptionNotFoundException;
 use Vnuswilliams\Subscription\Exceptions\FeatureNotFoundException;
 
 try {
-    Subscription::subscribeTo($company, 'plan-inexistant');
+    Subscription::subscribeTo($company, 'non-existent-plan');
 } catch (InvalidPlanException $e) {
-    // Plan introuvable ou inactif
+    // Plan not found or inactive
     Log::warning($e->getMessage());
 }
 ```
 
-**Planifiez la commande `subscription:check-lifecycle` sans faute.** Sans elle, un utilisateur inactif qui n’effectue aucune requête ne verra jamais son abonnement transitionner vers `expired` en base — et les événements `SubscriptionExpired` ne seront jamais émis.
+**Schedule the `subscription:check-lifecycle` command without fail.** Without it, an inactive user who makes no requests will never see their subscription transition to `expired` in the database — and `SubscriptionExpired` events will never be dispatched.
 
------
+---
 
-## Licence
+## License
 
-Ce package est distribué sous licence [MIT](LICENSE.md).#   l a r a v e l - s u b s c r i p t i o n  
- 
+This package is open-sourced software licensed under the [MIT license](LICENSE.md).
