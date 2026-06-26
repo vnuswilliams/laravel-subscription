@@ -74,13 +74,35 @@ php artisan vendor:publish --tag=subscription-migrations
 php artisan migrate
 ```
 
-### 3. (Optional) Publish the application service stub
+### 3. (Optional) Generate the application service
+
+The package provides a generator command that scaffolds a ready-to-use `SubscriptionService` tailored to the model that carries the `HasSubscriptions` trait in your application.
+
+Run it and pass your model name via the `--model` option:
 
 ```bash
-php artisan vendor:publish --tag=subscription-stubs
+# With a User model
+php artisan subscription:generate-service --model=User
+
+# With a Company model
+php artisan subscription:generate-service --model=Company
+
+# With a Team model
+php artisan subscription:generate-service --model=Team
 ```
 
-This copies `app/Services/SubscriptionService.php` into your project — a pre-filled service tailored to your business domain (see the [Full Recipe](#full-recipe-application-service) section).
+Omit the option to be prompted interactively:
+
+```bash
+php artisan subscription:generate-service
+
+# > Which model has the HasSubscriptions trait? (e.g. User, Company, Team)
+# > Company
+```
+
+This generates `app/Services/SubscriptionService.php` pre-filled with your model. If the file already exists, the command asks for confirmation before overwriting it. See the [Full Recipe](#full-recipe-application-service) section for the generated content and usage examples.
+
+> **Tip:** the model name is case-insensitive — `user`, `User`, and `USER` all produce `User` in the generated file.
 
 ---
 
@@ -575,13 +597,14 @@ protected function schedule(Schedule $schedule): void
 
 ## Full Recipe: Application Service
 
-Publish the stub provided by the package, then adapt it to your domain:
+Generate a ready-to-use `SubscriptionService` by running the generator command with the model that carries the `HasSubscriptions` trait:
 
 ```bash
-php artisan vendor:publish --tag=subscription-stubs
+# Replace "Company" with your actual model name
+php artisan subscription:generate-service --model=Company
 ```
 
-This generates `app/Services/SubscriptionService.php`. Here is what it contains and how to use it:
+This creates `app/Services/SubscriptionService.php` pre-wired to your model. Here is what it contains and how to use it:
 
 ```php
 // app/Services/SubscriptionService.php
