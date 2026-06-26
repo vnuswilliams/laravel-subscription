@@ -1,0 +1,210 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use Carbon\Carbon;
+use App\Enums\FeatureEnum;
+use App\Enums\PlanEnum;
+use App\Models\Company;
+use Illuminate\Database\Eloquent\Model;
+use Vnuswilliams\Subscription\Models\Plan;
+use Vnuswilliams\Subscription\Models\Subscription;
+use Vnuswilliams\Subscription\SubscriptionManager;
+
+/**
+ * Service applicatif d'abonnement.
+ *
+ * Ce fichier est un point de départ publié par le package vnuswilliams/laravel-subscription.
+ * Adaptez-le librement à votre domaine métier (Company, User, Team, etc.).
+ *
+ * Injectez SubscriptionManager pour accéder à toute la logique du package.
+ */
+final class SubscriptionService
+{
+    public function __construct(
+        private readonly SubscriptionManager $subscription,
+    ) {}
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Souscription / changement de plan
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Souscrit une entreprise à un plan (via PlanEnum).
+     * Gère le plan FREE avec essai de 15 jours.
+     */
+    public function subscribeTo(Company $company, PlanEnum $planEnum, bool $immediately = true): Subscription
+    {
+        $plan = $this->resolvePlan($planEnum);
+
+        if ($planEnum === PlanEnum::FREE) {
+            return $this->subscription->subscribeTo($company, $plan, expiration: now()->addDays(15));
+        }
+
+        return $this->subscription->subscribeTo($company, $plan, immediately: $immediately);
+    }
+
+    /**
+     * Change de plan (upgrade / downgrade).
+     */
+    public function switchPlan(Company $company, PlanEnum $planEnum, bool $immediately = true): Subscription
+    {
+        return $this->subscription->switchTo($company, $this->resolvePlan($planEnum), $immediately);
+    }
+
+    /**
+     * Renouvelle l'abonnement en cours.
+     */
+    public function renew(Company $company): Subscription
+    {
+        return $this->subscription->renew($company);
+    }
+
+    /**
+     * Annule l'abonnement (accès maintenu jusqu'à expiration + grace days).
+     */
+    public function cancel(Company $company): Subscription
+    {
+        return $this->subscription->cancel($company);
+    }
+
+    /**
+     * Coupe immédiatement l'accès sans attendre la fin de période.
+     */
+    public function suppress(Company $company): Subscription
+    {
+        return $this->subscription->suppress($company);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Vérifications d'état
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function hasActiveSubscription(Company $company): bool
+    {
+        return $this->subscription->hasActiveSubscription($company);
+    }
+
+    /**
+     * L'entreprise peut-elle ajouter un employé ?
+     */
+    public function canAddEmployee(Company $company): bool
+    {
+        return $this->hasActiveSubscription($company)
+            && $this->subscription->canConsume($company, FeatureEnum::MAX_EMPLOYEES->value, 1);
+    }
+
+    /**
+     * L'entreprise peut-elle ajouter un administrateur ?
+     */
+    public function canAddAdmin(Company $company): bool
+    {
+        return $this->hasActiveSubscription($company)
+            && $this->subscription->canConsume($company, FeatureEnum::MAX_ADMINS->value, 1);
+    }
+
+    /**
+     * L'entreprise a-t-elle accès à une feature booléenne ?
+     * (espace-collaborateur, documents, rapports-avances, support-prioritaire)
+     */
+    public function hasFeature(Company $company, FeatureEnum $feature): bool
+    {
+        return $this->hasActiveSubscription($company)
+            && $this->subscription->canConsume($company, $feature->value, 0);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Consommation des quotas
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Consomme 1 slot employé (à appeler à la création d'un employé).
+     */
+    public function consumeEmployeeSlot(Company $company): void
+    {
+        $this->subscription->consume($company, FeatureEnum::MAX_EMPLOYEES->value, 1);
+    }
+
+    /**
+     * Libère 1 slot employé (à appeler à la suppression d'un employé).
+     */
+    public function releaseEmployeeSlot(Company $company): void
+    {
+        $this->subscription->release($company, FeatureEnum::MAX_EMPLOYEES->value, 1);
+    }
+
+    /**
+     * Retourne le nombre de slots employés restants.
+     * 0 si pas d'abonnement actif.
+     */
+    public function remainingEmployeeSlots(Company $company): int
+    {
+        if (! $this->hasActiveSubscription($company)) {
+            return 0;
+        }
+
+        return $this->subscription->balance($company, FeatureEnum::MAX_EMPLOYEES->value);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Informations du plan courant
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Retourne le plan actuel sous forme d'enum, ou null.
+     */
+    public function currentPlan(Company $company): ?PlanEnum
+    {
+        $plan = $this->subscription->currentPlan($company);
+
+        return $plan !== null ? PlanEnum::tryFrom($plan->slug) : null;
+    }
+
+    /**
+     * Retourne la date d'expiration de l'abonnement actif.
+     */
+    public function expiresAt(Company $company): ?Carbon
+    {
+        return $this->subscription->expiresAt($company);
+    }
+
+    /**
+     * Prix mensuel d'un plan (FCFA).
+     */
+    public function priceFor(PlanEnum $planEnum): int
+    {
+        return $planEnum->monthlyPrice();
+    }
+
+    /**
+     * Plans disponibles groupés par famille pour la vue.
+     *
+     * @return array<string, array<int, array{enum: PlanEnum, plan: Plan}>>
+     */
+    public function availablePlansGrouped(): array
+    {
+        $result = [];
+
+        foreach (PlanEnum::paidFamilies() as $family => $cases) {
+            foreach ($cases as $case) {
+                $result[$family][] = [
+                    'enum' => $case,
+                    'plan' => $this->resolvePlan($case),
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Helper privé
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function resolvePlan(PlanEnum $planEnum): Plan
+    {
+        return $this->subscription->resolvePlan($planEnum->value);
+    }
+}
