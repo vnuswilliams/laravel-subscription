@@ -22,6 +22,7 @@ beforeEach(function (): void {
         'slug'             => 'pro',
         'periodicity_type' => 'month',
         'periodicity'      => 1,
+        'price'            => 19.99,
         'trial_days'       => 0,
         'grace_days'       => 7,
         'is_active'        => true,
@@ -36,6 +37,18 @@ it('creates a subscription with active status', function (): void {
 
     expect($sub->status)->toBe(SubscriptionStatus::Active->value)
         ->and($sub->plan_id)->toBe($this->plan->id);
+});
+
+it('stores the plan price by default when subscribing', function (): void {
+    $sub = $this->service->subscribeTo($this->subscriber, $this->plan);
+
+    expect($sub->price)->toBe('19.99');
+});
+
+it('stores a custom subscription price when provided', function (): void {
+    $sub = $this->service->subscribeTo($this->subscriber, $this->plan, price: 24);
+
+    expect($sub->price)->toBe('24.00');
 });
 
 it('sets trial status when plan has trial days', function (): void {

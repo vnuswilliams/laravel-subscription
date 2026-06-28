@@ -29,14 +29,14 @@ final class SubscriptionManager
     //  Souscription / cycle de vie
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true): Subscription
+    public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        return $this->subscriptions->subscribeTo($subscriber, $plan, $expiration, $immediately);
+        return $this->subscriptions->subscribeTo($subscriber, $plan, $expiration, $immediately, $price);
     }
 
-    public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true): Subscription
+    public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        return $this->subscriptions->switchTo($subscriber, $plan, $immediately);
+        return $this->subscriptions->switchTo($subscriber, $plan, $immediately, $price);
     }
 
     public function renew(Model $subscriber): Subscription

@@ -76,6 +76,7 @@ final class Plan extends Model
     protected function casts(): array
     {
         return [
+            'price'        => 'decimal:' . (string) config('subscriptions.price.scale', 2),
             'is_active'   => 'boolean',
             'trial_days'  => 'integer',
             'grace_days'  => 'integer',

@@ -29,7 +29,7 @@ final class SubscriptionService
      * @param  string|Plan  $plan   Slug du plan ou instance Plan
      * @param  Carbon|null  $expiration   Surcharge manuelle de la date de fin
      */
-    public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true): Subscription
+    public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
         $plan = $this->resolvePlan($plan);
 
@@ -37,7 +37,7 @@ final class SubscriptionService
         $current = $subscriber->subscription()->first(); // @phpstan-ignore-line
 
         if ($current !== null && $current->hasAccess()) {
-            return $this->switchTo($subscriber, $plan, $immediately);
+            return $this->switchTo($subscriber, $plan, $immediately, $price);
         }
 
         $now    = now();
@@ -58,6 +58,7 @@ final class SubscriptionService
         /** @var Subscription $subscription */
         $subscription = $subscriber->subscription()->create([ // @phpstan-ignore-line
             'plan_id'       => $plan->id,
+            'price'         => $price ?? $plan->price,
             'status'        => $status->value,
             'trial_ends_at' => $trialEndsAt,
             'starts_at'     => $now,
@@ -74,7 +75,7 @@ final class SubscriptionService
      * Change de plan (upgrade / downgrade).
      * Par défaut immédiat : l'ancien abonnement est supprimé, le nouveau commence.
      */
-    public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true): Subscription
+    public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
         $plan    = $this->resolvePlan($plan);
         $current = $this->getActiveSubscription($subscriber);
@@ -85,7 +86,7 @@ final class SubscriptionService
             $current->cancel();
         }
 
-        return $this->subscribeTo($subscriber, $plan);
+        return $this->subscribeTo($subscriber, $plan, price: $price);
     }
 
     /**

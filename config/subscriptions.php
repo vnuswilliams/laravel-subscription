@@ -32,6 +32,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Type de clé du modèle souscripteur
+    |--------------------------------------------------------------------------
+    | Utilisé par la migration subscriptions pour créer subscriber_id.
+    | Valeurs supportées : id (entier), uuid, ulid.
+    */
+    'subscriber_key_type' => env('SUBSCRIPTIONS_SUBSCRIBER_KEY_TYPE', 'id'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Colonne prix
+    |--------------------------------------------------------------------------
+    | Decimal supporte les prix entiers (ex: 100) et décimaux (ex: 19.99).
+    */
+    'price' => [
+        'precision' => 12,
+        'scale'     => 2,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Période de grâce par défaut (en jours)
     |--------------------------------------------------------------------------
     | Appliqué uniquement si le Plan n'a pas de grace_days explicite.
