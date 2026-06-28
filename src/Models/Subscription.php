@@ -166,6 +166,7 @@ final class Subscription extends Model
     protected function casts(): array
     {
         return [
+            'price'        => 'decimal:' . (string) config('subscriptions.price.scale', 2),
             'trial_ends_at'  => 'datetime',
             'starts_at'      => 'datetime',
             'ends_at'        => 'datetime',

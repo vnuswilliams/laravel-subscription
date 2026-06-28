@@ -15,6 +15,11 @@ return new class extends Migration
             $table->string('name')->unique();
             $table->string('slug')->unique();
             $table->text('description')->nullable();
+            $table->decimal(
+                'price',
+                (int) config('subscriptions.price.precision', 12),
+                (int) config('subscriptions.price.scale', 2)
+            )->default(0);
             $table->boolean('is_active')->default(true);
             $table->string('periodicity_type')->nullable()->comment('day|week|month|year — null = permanent');
             $table->unsignedSmallInteger('periodicity')->nullable()->comment('ex: 1 = 1 mois');

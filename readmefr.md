@@ -71,9 +71,15 @@ php artisan vendor:publish --tag=subscription-config
 # Migrations
 php artisan vendor:publish --tag=subscription-migrations
 
+# Choisissez ceci avant les migrations si votre modèle souscripteur utilise des UUIDs ou ULIDs
+# Valeurs supportées : id (défaut), uuid, ulid
+SUBSCRIPTIONS_SUBSCRIBER_KEY_TYPE=uuid
+
 # Lancer les migrations
 php artisan migrate
 ```
+
+Par défaut, la configuration `subscriptions.subscriber_key_type` vaut `id` et crée un `subscriber_id` entier classique. Définissez-la à `uuid` ou `ulid` avant d'exécuter les migrations du package si le modèle qui utilise `HasSubscriptions` possède une clé primaire UUID/ULID. Les migrations utilisent aussi `subscriptions.price.precision` et `subscriptions.price.scale` pour les prix des plans et abonnements, avec une colonne `decimal(12, 2)` par défaut afin de supporter aussi bien `100` que `19.99`.
 
 ### 3. (Optionnel) Publier le service applicatif stub
 
@@ -103,6 +109,7 @@ $pro = Plan::create([
     'name'             => 'Pro',
     'slug'             => 'pro',
     'description'      => 'Pour les équipes en croissance.',
+    'price'            => 19.99,
     'periodicity_type' => PeriodicityType::Month->value,  // 'month'
     'periodicity'      => 1,
     'trial_days'       => 0,
@@ -130,6 +137,7 @@ $pro->features()->create([
 Plan::create([
     'name'             => 'Gratuit',
     'slug'             => 'free',
+    'price'            => 0,
     'periodicity_type' => null,   // null = plan permanent, ne expire jamais
     'periodicity'      => null,
     'trial_days'       => 15,
@@ -250,6 +258,19 @@ $company->subscribeTo($plan);
 // Via la Facade
 use Vnuswilliams\Subscription\Facades\Subscription;
 Subscription::subscribeTo($company, 'pro');
+```
+
+L'abonnement créé stocke son propre `price`. Si vous ne passez pas de prix personnalisé, le prix du plan est copié au moment de la souscription. Vous pouvez le surcharger pour un prix négocié, des add-ons, une remise ou un prorata :
+
+```php
+// Utilise le prix du plan
+$company->subscribeTo('pro');
+
+// Stocke 24.99 sur l'abonnement, sans modifier le prix du plan
+$company->subscribeTo('pro', price: 24.99);
+
+// Les prix entiers sont aussi supportés
+Subscription::subscribeTo($company, 'enterprise', price: 100);
 ```
 
 Si le plan a des `trial_days > 0`, le statut sera automatiquement `on_trial` et `trial_ends_at` sera calculé. Aucune action supplémentaire requise.
@@ -689,8 +710,8 @@ class EmployeeController extends Controller
 |Méthode                                        |Retour             |Description                                    |
 |-----------------------------------------------|-------------------|-----------------------------------------------|
 |`subscription()`                               |`MorphOne`         |Relation Eloquent vers le dernier abonnement   |
-|`subscribeTo($plan, $expiration, $immediately)`|`Subscription`     |Souscrit ou switch si abonnement actif existant|
-|`switchTo($plan, $immediately)`                |`Subscription`     |Change de plan                                 |
+|`subscribeTo($plan, $expiration, $immediately, $price)`|`Subscription`     |Souscrit ou switch si abonnement actif existant|
+|`switchTo($plan, $immediately, $price)`                |`Subscription`     |Change de plan                                 |
 |`renewSubscription()`                          |`Subscription`     |Renouvelle depuis maintenant                   |
 |`hasActiveSubscription()`                      |`bool`             |Abonnement valide ? (actif, essai, grâce)      |
 |`currentPlan()`                                |`Plan|null`        |Plan actuel                                    |

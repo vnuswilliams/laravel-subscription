@@ -36,14 +36,14 @@ trait HasSubscriptions
     //  Souscription / actions
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function subscribeTo(string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true): Subscription
+    public function subscribeTo(string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        return app(SubscriptionService::class)->subscribeTo($this, $plan, $expiration, $immediately);
+        return app(SubscriptionService::class)->subscribeTo($this, $plan, $expiration, $immediately, $price);
     }
 
-    public function switchTo(string|Plan $plan, bool $immediately = true): Subscription
+    public function switchTo(string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        return app(SubscriptionService::class)->switchTo($this, $plan, $immediately);
+        return app(SubscriptionService::class)->switchTo($this, $plan, $immediately, $price);
     }
 
     public function renewSubscription(): Subscription

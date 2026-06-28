@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Facade;
 use Vnuswilliams\Subscription\SubscriptionManager;
 
 /**
- * @method static \Vnuswilliams\Subscription\Models\Subscription  subscribeTo(\Illuminate\Database\Eloquent\Model $subscriber, string|\Vnuswilliams\Subscription\Models\Plan $plan, ?\Carbon\Carbon $expiration = null, bool $immediately = true)
- * @method static \Vnuswilliams\Subscription\Models\Subscription  switchTo(\Illuminate\Database\Eloquent\Model $subscriber, string|\Vnuswilliams\Subscription\Models\Plan $plan, bool $immediately = true)
+ * @method static \Vnuswilliams\Subscription\Models\Subscription  subscribeTo(\Illuminate\Database\Eloquent\Model $subscriber, string|\Vnuswilliams\Subscription\Models\Plan $plan, ?\Carbon\Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null)
+ * @method static \Vnuswilliams\Subscription\Models\Subscription  switchTo(\Illuminate\Database\Eloquent\Model $subscriber, string|\Vnuswilliams\Subscription\Models\Plan $plan, bool $immediately = true, int|float|string|null $price = null)
  * @method static \Vnuswilliams\Subscription\Models\Subscription  renew(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static \Vnuswilliams\Subscription\Models\Subscription  cancel(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static \Vnuswilliams\Subscription\Models\Subscription  suppress(\Illuminate\Database\Eloquent\Model $subscriber)

@@ -12,10 +12,23 @@ return new class extends Migration
     {
         Schema::create(config('subscriptions.tables.subscriptions', 'subscriptions'), function (Blueprint $table): void {
             $table->id();
-            $table->morphs('subscriber');
+            $subscriberKeyType = config('subscriptions.subscriber_key_type', 'id');
+
+            if ($subscriberKeyType === 'uuid') {
+                $table->uuidMorphs('subscriber');
+            } elseif ($subscriberKeyType === 'ulid') {
+                $table->ulidMorphs('subscriber');
+            } else {
+                $table->morphs('subscriber');
+            }
             $table->foreignId('plan_id')->constrained(
                 config('subscriptions.tables.plans', 'plans')
             )->restrictOnDelete();
+            $table->decimal(
+                'price',
+                (int) config('subscriptions.price.precision', 12),
+                (int) config('subscriptions.price.scale', 2)
+            )->default(0);
             $table->string('status')->default('active')->comment('active|on_trial|on_grace_period|canceled|expired');
             $table->timestamp('trial_ends_at')->nullable();
             $table->timestamp('starts_at');
