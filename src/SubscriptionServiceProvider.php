@@ -7,6 +7,7 @@ namespace Vnuswilliams\Subscription;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Vnuswilliams\Subscription\Console\Commands\CheckSubscriptionLifecycle;
+use Vnuswilliams\Subscription\Console\Commands\InstallSubscriptionPackage;
 use Vnuswilliams\Subscription\Http\Middleware\CheckSubscription;
 use Vnuswilliams\Subscription\Services\FeatureService;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
@@ -80,6 +81,7 @@ final class SubscriptionServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 CheckSubscriptionLifecycle::class,
+                InstallSubscriptionPackage::class,
             ]);
         }
     }

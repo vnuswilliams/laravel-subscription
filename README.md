@@ -63,12 +63,10 @@ The `ServiceProvider` and `Facade` are auto-discovered by Laravel. No manual reg
 
 ### 2. Publish the configuration and migrations
 
-```bash
-# Configuration
-php artisan vendor:publish --tag=subscription-config
+Use the package install command to publish both the configuration file and the migrations in one step:
 
-# Migrations
-php artisan vendor:publish --tag=subscription-migrations
+```bash
+php artisan subscription:install
 
 # Choose this before running migrations if your subscriber model uses UUIDs or ULIDs
 # Supported values: id (default), uuid, ulid
@@ -78,7 +76,7 @@ SUBSCRIPTIONS_SUBSCRIBER_KEY_TYPE=uuid
 php artisan migrate
 ```
 
-By default, the `subscriptions.subscriber_key_type` config value is `id`, which creates the classic integer `subscriber_id` column. Set it to `uuid` or `ulid` before running the package migrations when the model using `HasSubscriptions` has a UUID/ULID primary key. The migrations also use `subscriptions.price.precision` and `subscriptions.price.scale` for plan and subscription prices, defaulting to a `decimal(12, 2)` column so values like `100` and `19.99` are both supported.
+If `config/subscriptions.php` or any package migration already exists in your application, `subscription:install` deletes the existing file first and regenerates a fresh copy from the package. By default, the `subscriptions.subscriber_key_type` config value is `id`, which creates the classic integer `subscriber_id` column. Set it to `uuid` or `ulid` before running the package migrations when the model using `HasSubscriptions` has a UUID/ULID primary key. The migrations also use `subscriptions.price.precision` and `subscriptions.price.scale` for plan and subscription prices, defaulting to a `decimal(12, 2)` column so values like `100` and `19.99` are both supported.
 
 ### 3. (Optional) Generate the application service
 
