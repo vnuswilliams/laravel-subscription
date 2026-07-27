@@ -21,11 +21,13 @@ This documentation is always release in [french version](readmefr.md).
 1. [Installation](#installation)
 1. [Configuring Plans in the Database](#configuring-plans-in-the-database)
 1. [Preparing the Subscriber Model](#preparing-the-subscriber-model)
+1. [Team / Multi-tenant Support](#team--multi-tenant-support)
 1. [Entry Points: Three Ways to Use the Package](#entry-points-three-ways-to-use-the-package)
 1. [Managing Subscriptions](#managing-subscriptions)
 1. [Features & Quotas](#features--quotas)
 1. [Lifecycle & Grace Period](#lifecycle--grace-period)
 1. [Route Protection Middleware](#route-protection-middleware)
+1. [Blade Directives](#blade-directives)
 1. [Laravel Events](#laravel-events)
 1. [Artisan Command](#artisan-command)
 1. [Full Recipe: Application Service](#full-recipe-application-service)
@@ -202,6 +204,58 @@ class Company extends Model
 ```
 
 That's it. The trait automatically exposes the `subscription()` relationship and all of the package's fluent methods directly on your model.
+
+---
+
+## Team / Multi-tenant Support
+
+In many SaaS applications, a single **team owner** pays for the subscription, while other team members benefit from it without having their own active subscription line. This package supports this pattern out of the box via a global **subject resolver**.
+
+### How it works
+
+The `SubscriptionManager` exposes a static `resolveSubjectUsing()` method. When configured, every **read operation** (checking access, consuming quotas, getting balance) resolves the "real subscription bearer" through this resolver before executing.
+
+**No interface or method is required on your Eloquent model.** The resolver is a simple Closure registered once in your `AppServiceProvider`.
+
+### Configuration
+
+```php
+// App\Providers\AppServiceProvider::boot()
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
+use Vnuswilliams\Subscription\SubscriptionManager;
+
+public function boot(): void
+{
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        // If the user belongs to a team, delegate to the team owner
+        return $model instanceof User
+            ? ($model->team?->owner ?? $model)
+            : $model;
+    });
+}
+```
+
+### What this means in practice
+
+- `$member->hasActiveSubscription()` → checks the **owner's** subscription
+- `$member->canConsume('max-employees', 1)` → checks the **owner's** quota
+- `$member->consume('max-employees', 1)` → consumes from the **owner's** quota
+- `$member->subscribeTo('pro')` → writes on the **member** directly (write operations are never resolved)
+
+All team members share the same quota pool since they all resolve to the owner's subscription.
+
+### Key rules
+
+- **Delegation is unconditional.** For any user attached to a team where they are not the owner, read operations always delegate to the owner — even if the member has their own personal subscription. One source of truth per team: the owner.
+- **If the user IS the owner**, `$model->team->owner` returns `$model` itself — no special case needed.
+- **Write operations (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) are never resolved.** They always operate on the model you explicitly pass. This prevents a team member from accidentally modifying the owner's subscription.
+- **A member's personal subscription remains invisible** as long as they are a non-owner member of a team. It becomes active again if they leave the team or become the owner.
+
+### Without a resolver (full backward compatibility)
+
+If you never call `SubscriptionManager::resolveSubjectUsing(...)`, every method operates on the model it is called on — exactly as before. **Zero breaking changes** for existing projects.
 
 ---
 
@@ -532,6 +586,72 @@ When access is denied, the middleware returns:
 - A **redirect** to `home` with an `error` flash message otherwise
 
 To customise this behaviour, extend `CheckSubscription` and rebind it in your `AppServiceProvider`.
+
+---
+
+## Blade Directives
+
+The package registers custom Blade conditional directives in its `ServiceProvider`. They automatically benefit from the subject resolver (team support) since they call the `SubscriptionManager` read methods internally.
+
+### Available directives
+
+| Directive | Parameters | Equivalent method |
+|---|---|---|
+| `@hasSubscription` | `(?Model $subscriber)` | `hasActiveSubscription()` |
+| `@canConsume($feature, $amount)` | `(string $feature, int $amount, ?Model $subscriber)` | `canConsume()` |
+| `@subscribedTo($planSlug)` | `(string $planSlug, ?Model $subscriber)` | `currentPlan()->slug === $planSlug` |
+| `@onTrial` | `(?Model $subscriber)` | `subscription->isOnTrial()` |
+| `@onGracePeriod` | `(?Model $subscriber)` | `subscription->isOnGracePeriod()` |
+| `@subscriptionCanceled` | `(?Model $subscriber)` | `subscription->isCanceled()` |
+| `@subscriptionExpired` | `(?Model $subscriber)` | `subscription->isExpired()` |
+
+All directives default to `Auth::user()` when no subscriber is passed.
+
+### Usage examples
+
+```blade
+@hasSubscription
+    <p>Welcome, you have access to the dashboard.</p>
+@else
+    <p>Subscribe to access this feature.</p>
+@endhasSubscription
+
+@canConsume('max-employees')
+    <button>Add Employee</button>
+@else
+    <p>Quota reached — upgrade your plan.</p>
+@endcanConsume
+
+@subscribedTo('pro')
+    <span class="badge">Pro Plan</span>
+@endsubscribedTo
+
+@onTrial
+    <div class="alert alert-info">You are on a free trial.</div>
+@endonTrial
+
+@onGracePeriod
+    <div class="alert alert-warning">
+        Your subscription has expired. Please settle your payment before the end of the grace period.
+    </div>
+@endonGracePeriod
+
+@subscriptionCanceled
+    <div class="alert alert-warning">
+        Your subscription has been canceled. Access will end on {{ auth()->user()->subscription->ends_at->format('d/m/Y') }}.
+    </div>
+@endsubscriptionCanceled
+```
+
+### Overriding the subscriber
+
+All directives accept an optional subscriber model as the first parameter. This is useful for admin pages where you display subscription info for a different user:
+
+```blade
+@hasSubscription($team->owner)
+    <p>This team has an active subscription.</p>
+@endhasSubscription
+```
 
 ---
 
