@@ -22,11 +22,13 @@ Cette documentation est aussi [fourni en anglais](README.md).
 1. [Installation](#installation)
 1. [Configuration des plans en base](#configuration-des-plans-en-base)
 1. [Préparer le modèle souscripteur](#préparer-le-modèle-souscripteur)
-1. [Points d’entrée : trois façons d’utiliser le package](#points-dentrée--trois-façons-dutiliser-le-package)
+1. [Support Team / Multi-tenant](#support-team--multi-tenant)
+1. [Points d'entrée : trois façons d'utiliser le package](#points-dentrée--trois-façons-dutiliser-le-package)
 1. [Gestion des abonnements](#gestion-des-abonnements)
 1. [Features & Quotas](#features--quotas)
 1. [Cycle de vie & Période de grâce](#cycle-de-vie--période-de-grâce)
 1. [Middleware de protection des routes](#middleware-de-protection-des-routes)
+1. [Directives Blade](#directives-blade)
 1. [Événements Laravel](#événements-laravel)
 1. [Commande Artisan](#commande-artisan)
 1. [Recette complète : service applicatif](#recette-complète--service-applicatif)
@@ -179,6 +181,57 @@ class Company extends Model
 ```
 
 C’est tout. Le trait expose automatiquement la relation `subscription()` et toutes les méthodes fluides du package directement sur votre modèle.
+
+-----
+
+## Support Team / Multi-tenant
+
+Dans de nombreuses applications SaaS, un seul **propriétaire d’équipe** paie l’abonnement, tandis que les autres membres en bénéficient sans avoir leur propre ligne d’abonnement active. Ce package supporte ce schéma nativement via un **résolveur de sujet** global.
+
+### Comment ça marche
+
+Le `SubscriptionManager` expose une méthode statique `resolveSubjectUsing()`. Lorsque configurée, chaque **opération de lecture** (vérification d’accès, consommation de quotas, consultation du solde) résout le "vrai porteur d’abonnement" via ce résolveur avant d’exécuter.
+
+**Aucune interface ni méthode n’est requise sur votre modèle Eloquent.** Le résolveur est simplement une Closure enregistrée une seule fois dans votre `AppServiceProvider`.
+
+### Configuration
+
+```php
+// App\Providers\AppServiceProvider::boot()
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
+use Vnuswilliams\Subscription\SubscriptionManager;
+
+public function boot(): void
+{
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof User
+            ? ($model->team?->owner ?? $model)
+            : $model;
+    });
+}
+```
+
+### Conséquences pratiques
+
+- `$membre->hasActiveSubscription()` → vérifie l’abonnement du **propriétaire**
+- `$membre->canConsume('max-employees', 1)` → vérifie le quota du **propriétaire**
+- `$membre->consume('max-employees', 1)` → consomme depuis le quota du **propriétaire**
+- `$membre->subscribeTo('pro')` → écrit directement sur le **membre** (les opérations d’écriture ne sont jamais résolues)
+
+Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils résolvent tous vers l’abonnement du propriétaire.
+
+### Règles clés
+
+- **La délégation est inconditionnelle.** Pour tout membre rattaché à une équipe dont il n’est pas le propriétaire, les opérations de lecture déléguent toujours vers le propriétaire — même si le membre possède son propre abonnement personnel. Une seule source de vérité par équipe : le propriétaire.
+- **Si l’utilisateur EST le propriétaire**, `$model->team->owner` retourne `$model` lui-même — aucun cas particulier à coder.
+- **Les opérations d’écriture (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) ne sont jamais résolues.** Elles opèrent toujours sur le modèle explicitement fourni. Cela empêche un membre de modifier silencieusement l’abonnement du propriétaire.
+- **L’abonnement personnel d’un membre reste invisible** tant qu’il est membre non-propriétaire d’une équipe. Il redevient actif s’il quitte l’équipe ou en devient le propriétaire.
+
+### Sans résolveur (compatibilité totale)
+
+Si vous n’appelez jamais `SubscriptionManager::resolveSubjectUsing(...)`, chaque méthode opère sur le modèle sur lequel elle est appelée — exactement comme avant. **Aucune rupture de rétrocompatibilité** pour les projets existants.
 
 -----
 
@@ -509,6 +562,72 @@ En cas de refus, le middleware retourne :
 - **Redirect** vers `home` avec un message `error` en session sinon
 
 Pour personnaliser ce comportement, étendez `CheckSubscription` et rebindez-le dans votre `AppServiceProvider`.
+
+-----
+
+## Directives Blade
+
+Le package enregistre des directives Blade conditionnelles personnalisées dans son `ServiceProvider`. Elles bénéficient automatiquement du résolveur de sujet (support team) puisqu’elles appellent les méthodes de lecture du `SubscriptionManager` en interne.
+
+### Directives disponibles
+
+| Directive | Paramètres | Méthode équivalente |
+|---|---|---|
+| `@hasSubscription` | `(?Model $subscriber)` | `hasActiveSubscription()` |
+| `@canConsume($feature, $amount)` | `(string $feature, int $amount, ?Model $subscriber)` | `canConsume()` |
+| `@subscribedTo($planSlug)` | `(string $planSlug, ?Model $subscriber)` | `currentPlan()->slug === $planSlug` |
+| `@onTrial` | `(?Model $subscriber)` | `subscription->isOnTrial()` |
+| `@onGracePeriod` | `(?Model $subscriber)` | `subscription->isOnGracePeriod()` |
+| `@subscriptionCanceled` | `(?Model $subscriber)` | `subscription->isCanceled()` |
+| `@subscriptionExpired` | `(?Model $subscriber)` | `subscription->isExpired()` |
+
+Toutes les directives utilisent `Auth::user()` par défaut aucun subscriber n’est passé.
+
+### Exemples d’utilisation
+
+```blade
+@hasSubscription
+    <p>Bienvenue, vous avez accès au tableau de bord.</p>
+@else
+    <p>Abonnez-vous pour accéder à cette fonctionnalité.</p>
+@endhasSubscription
+
+@canConsume('max-employees')
+    <button>Ajouter un employé</button>
+@else
+    <p>Quota atteint — passez à un plan supérieur.</p>
+@endcanConsume
+
+@subscribedTo('pro')
+    <span class="badge">Plan Pro</span>
+@endsubscribedTo
+
+@onTrial
+    <div class="alert alert-info">Vous êtes en essai gratuit.</div>
+@endonTrial
+
+@onGracePeriod
+    <div class="alert alert-warning">
+        Votre abonnement a expiré, réglez votre paiement avant la fin de la période de grâce.
+    </div>
+@endonGracePeriod
+
+@subscriptionCanceled
+    <div class="alert alert-warning">
+        Votre abonnement a été résilié. L’accès prendra fin le {{ auth()->user()->subscription->ends_at->format('d/m/Y') }}.
+    </div>
+@endsubscriptionCanceled
+```
+
+### Surcharge du subscriber
+
+Toutes les directives acceptent un modèle subscriber optionnel comme premier paramètre. C’est utile pour les pages admin où vous affichez les informations d’abonnement d’un autre utilisateur :
+
+```blade
+@hasSubscription($team->owner)
+    <p>Cette équipe a un abonnement actif.</p>
+@endhasSubscription
+```
 
 -----
 
