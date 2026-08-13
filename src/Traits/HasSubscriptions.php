@@ -83,13 +83,8 @@ trait HasSubscriptions
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Souscription / actions (propriétaire uniquement avec un resolver d'équipe)
+    //  Souscription / actions (toujours sur ce modèle, jamais résolues)
     // ─────────────────────────────────────────────────────────────────────────
-
-    public function canManageSubscription(): bool
-    {
-        return app(SubscriptionManager::class)->canManageSubscription($this);
-    }
 
     public function subscribeTo(
         string|Plan $plan,
@@ -125,40 +120,6 @@ trait HasSubscriptions
     public function currentPlan(): ?Plan
     {
         return app(SubscriptionManager::class)->currentPlan($this);
-    }
-
-    /**
-     * Alias court de currentPlan(). Il retourne le plan effectif utilisé par
-     * ce modèle, donc le plan du propriétaire lorsque le modèle est membre
-     * non-propriétaire d'une team.
-     */
-    public function plan(): ?Plan
-    {
-        return $this->currentPlan();
-    }
-
-    /**
-     * Retourne le plan effectif de l'utilisateur authentifié.
-     */
-    public static function authenticatedPlan(): ?Plan
-    {
-        return static::currentUser()?->plan();
-    }
-
-    /**
-     * Indique si l'utilisateur authentifié dispose d'un abonnement effectif.
-     */
-    public static function authenticatedHasActiveSubscription(): bool
-    {
-        return static::currentUser()?->hasActiveSubscription() ?? false;
-    }
-
-    /**
-     * Retourne la date d'expiration de l'abonnement effectif de l'utilisateur authentifié.
-     */
-    public static function authenticatedSubscriptionExpiresAt(): ?Carbon
-    {
-        return static::currentUser()?->subscriptionExpiresAt();
     }
 
     public function subscriptionExpiresAt(): ?Carbon

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Model;
 use Vnuswilliams\Subscription\Enums\FeatureType;
-use Vnuswilliams\Subscription\Exceptions\SubscriptionManagementNotAllowedException;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
 use Vnuswilliams\Subscription\SubscriptionManager;
@@ -344,40 +343,18 @@ it('routes trait reads and quota consumption to the team owner', function (): vo
         ->and($this->member->balance('max-employees'))->toBe(8);
 });
 
-it('returns the owner plan when the team member has a personal subscription', function (): void {
+it('keeps trait subscription writes on the explicit team member', function (): void {
     SubscriptionManager::resolveSubjectUsing(function (Model $model) {
         return $model instanceof FakeSubscriber && $model->id === $this->member->id
             ? $this->owner
             : $model;
     });
 
-    $memberPlan = Plan::create([
-        'name' => 'Personal',
-        'slug' => 'personal',
-        'periodicity_type' => 'month',
-        'periodicity' => 1,
-        'price' => 9.99,
-        'trial_days' => 0,
-        'grace_days' => 7,
-        'is_active' => true,
-    ]);
+    $this->member->subscribeTo($this->plan);
 
-    $this->owner->subscribeTo($this->plan);
-    $this->member->subscription()->create([
-        'plan_id' => $memberPlan->id,
-        'price' => $memberPlan->price,
-        'status' => 'active',
-        'starts_at' => now(),
-        'ends_at' => now()->addMonth(),
-    ]);
-
-    $ownerPlan = $this->owner->currentPlan();
-    $resolvedPlan = $this->member->currentPlan();
-
-    expect($resolvedPlan)->not->toBeNull()
-        ->and($ownerPlan)->not->toBeNull()
-        ->and($resolvedPlan->is($ownerPlan))->toBeTrue()
-        ->and($resolvedPlan->slug)->toBe('pro');
+    expect($this->member->subscription()->first())->not->toBeNull()
+        ->and($this->owner->subscription()->first())->toBeNull()
+        ->and($this->member->hasActiveSubscription())->toBeFalse();
 });
 
 // ─── flushSubjectResolver ───────────────────────────────────────────────
