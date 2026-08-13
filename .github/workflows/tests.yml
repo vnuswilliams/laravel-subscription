@@ -38,5 +38,8 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Run tests
+      - name: Run unit tests
+        run: vendor/bin/pest tests/Unit
+
+      - name: Run full test suite
         run: composer test
