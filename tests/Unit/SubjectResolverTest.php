@@ -217,6 +217,8 @@ it('prevents a team member from starting a subscription through the manager or t
     expect(fn () => $this->manager->subscribeTo($this->member, $this->plan))
         ->toThrow(SubscriptionManagementNotAllowedException::class)
         ->and(fn () => $this->member->subscribeTo($this->plan))
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $this->service->subscribeTo($this->member, $this->plan))
         ->toThrow(SubscriptionManagementNotAllowedException::class);
 
     expect($this->member->subscription()->first())->toBeNull()
@@ -235,6 +237,29 @@ it('cancel operates on the explicit model, not the resolved subject', function (
 
     expect($this->manager->hasActiveSubscription($this->owner))->toBeFalse();
     expect($this->manager->hasActiveSubscription($this->member))->toBeFalse();
+});
+
+it('prevents direct subscription-model transitions for a team member', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
+
+    $legacySubscription = $this->member->subscription()->create([
+        'plan_id' => $this->plan->id,
+        'price' => $this->plan->price,
+        'status' => 'active',
+        'starts_at' => now(),
+        'ends_at' => now()->addMonth(),
+    ]);
+
+    expect(fn () => $legacySubscription->cancel())
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $legacySubscription->suppress())
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $legacySubscription->renew())
+        ->toThrow(SubscriptionManagementNotAllowedException::class);
 });
 
 it('prevents a team member from changing, renewing, cancelling, or suppressing a subscription', function (): void {
@@ -322,7 +347,13 @@ it('returns the owner plan when the team member has a personal subscription', fu
     ]);
 
     $this->owner->subscribeTo($this->plan);
-    $this->service->subscribeTo($this->member, $memberPlan);
+    $this->member->subscription()->create([
+        'plan_id' => $memberPlan->id,
+        'price' => $memberPlan->price,
+        'status' => 'active',
+        'starts_at' => now(),
+        'ends_at' => now()->addMonth(),
+    ]);
 
     $ownerPlan = $this->owner->currentPlan();
     $resolvedPlan = $this->member->currentPlan();

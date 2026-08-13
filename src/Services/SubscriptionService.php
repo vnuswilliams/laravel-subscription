@@ -13,6 +13,7 @@ use Vnuswilliams\Subscription\Exceptions\InvalidPlanException;
 use Vnuswilliams\Subscription\Exceptions\SubscriptionNotFoundException;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Models\Subscription;
+use Vnuswilliams\Subscription\SubscriptionManager;
 
 final class SubscriptionService
 {
@@ -31,6 +32,8 @@ final class SubscriptionService
      */
     public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
+        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
+
         $plan = $this->resolvePlan($plan);
 
         /** @var Subscription|null $current */
@@ -40,12 +43,12 @@ final class SubscriptionService
             return $this->switchTo($subscriber, $plan, $immediately, $price);
         }
 
-        $now    = now();
+        $now = now();
         $status = SubscriptionStatus::Active;
         $trialEndsAt = null;
 
         if ($plan->hasTrial()) {
-            $status      = SubscriptionStatus::OnTrial;
+            $status = SubscriptionStatus::OnTrial;
             $trialEndsAt = $now->copy()->addDays($plan->trial_days);
         }
 
@@ -57,12 +60,12 @@ final class SubscriptionService
 
         /** @var Subscription $subscription */
         $subscription = $subscriber->subscription()->create([ // @phpstan-ignore-line
-            'plan_id'       => $plan->id,
-            'price'         => $price ?? $plan->price,
-            'status'        => $status->value,
+            'plan_id' => $plan->id,
+            'price' => $price ?? $plan->price,
+            'status' => $status->value,
             'trial_ends_at' => $trialEndsAt,
-            'starts_at'     => $now,
-            'ends_at'       => $endsAt,
+            'starts_at' => $now,
+            'ends_at' => $endsAt,
             'grace_ends_at' => $graceEndsAt,
         ]);
 
@@ -77,7 +80,9 @@ final class SubscriptionService
      */
     public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        $plan    = $this->resolvePlan($plan);
+        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
+
+        $plan = $this->resolvePlan($plan);
         $current = $this->getActiveSubscription($subscriber);
 
         if ($immediately) {
@@ -94,6 +99,8 @@ final class SubscriptionService
      */
     public function renew(Model $subscriber): Subscription
     {
+        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
+
         return $this->getActiveSubscription($subscriber)->renew();
     }
 
@@ -102,6 +109,8 @@ final class SubscriptionService
      */
     public function cancel(Model $subscriber): Subscription
     {
+        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
+
         return $this->getActiveSubscription($subscriber)->cancel();
     }
 
@@ -110,6 +119,8 @@ final class SubscriptionService
      */
     public function suppress(Model $subscriber): Subscription
     {
+        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
+
         return $this->getActiveSubscription($subscriber)->suppress();
     }
 

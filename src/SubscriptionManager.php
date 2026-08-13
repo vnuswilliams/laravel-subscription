@@ -48,26 +48,51 @@ final class SubscriptionManager
     }
 
     /**
-     * Résout le sujet effectif porteur d'abonnement.
-     * Si aucun resolver n'est configuré, retourne le modèle tel quel.
-     */
-    protected function resolveSubject(Model $model): Model
-    {
-        return static::$subjectResolver
-            ? (static::$subjectResolver)($model)
-            : $model;
-    }
-
-    /**
      * Indique si ce modèle est autorisé à administrer l'abonnement qu'il utilise.
      *
      * Sans resolver, le modèle est son propre propriétaire. Lorsqu'un resolver
      * renvoie le propriétaire d'une team, seul ce propriétaire peut effectuer
      * les opérations d'écriture sur l'abonnement mutualisé.
      */
+    public static function canManageSubscriptionFor(Model $subscriber): bool
+    {
+        return static::resolveSubjectFor($subscriber)->is($subscriber);
+    }
+
+    /**
+     * @throws SubscriptionManagementNotAllowedException
+     */
+    public static function ensureCanManageSubscriptionFor(Model $subscriber): void
+    {
+        if (static::canManageSubscriptionFor($subscriber)) {
+            return;
+        }
+
+        throw SubscriptionManagementNotAllowedException::forSubscriber(
+            $subscriber->getMorphClass(),
+            $subscriber->getKey() ?? 'unsaved',
+        );
+    }
+
+    /**
+     * Résout le sujet effectif porteur d'abonnement.
+     * Si aucun resolver n'est configuré, retourne le modèle tel quel.
+     */
+    protected static function resolveSubjectFor(Model $model): Model
+    {
+        return static::$subjectResolver
+            ? (static::$subjectResolver)($model)
+            : $model;
+    }
+
     public function canManageSubscription(Model $subscriber): bool
     {
-        return $this->resolveSubject($subscriber)->is($subscriber);
+        return static::canManageSubscriptionFor($subscriber);
+    }
+
+    protected function resolveSubject(Model $model): Model
+    {
+        return static::resolveSubjectFor($model);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -79,8 +104,6 @@ final class SubscriptionManager
      */
     public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        $this->ensureCanManageSubscription($subscriber);
-
         return $this->subscriptions->subscribeTo($subscriber, $plan, $expiration, $immediately, $price);
     }
 
@@ -89,8 +112,6 @@ final class SubscriptionManager
      */
     public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
-        $this->ensureCanManageSubscription($subscriber);
-
         return $this->subscriptions->switchTo($subscriber, $plan, $immediately, $price);
     }
 
@@ -99,8 +120,6 @@ final class SubscriptionManager
      */
     public function renew(Model $subscriber): Subscription
     {
-        $this->ensureCanManageSubscription($subscriber);
-
         return $this->subscriptions->renew($subscriber);
     }
 
@@ -109,8 +128,6 @@ final class SubscriptionManager
      */
     public function cancel(Model $subscriber): Subscription
     {
-        $this->ensureCanManageSubscription($subscriber);
-
         return $this->subscriptions->cancel($subscriber);
     }
 
@@ -119,24 +136,7 @@ final class SubscriptionManager
      */
     public function suppress(Model $subscriber): Subscription
     {
-        $this->ensureCanManageSubscription($subscriber);
-
         return $this->subscriptions->suppress($subscriber);
-    }
-
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
-    private function ensureCanManageSubscription(Model $subscriber): void
-    {
-        if ($this->canManageSubscription($subscriber)) {
-            return;
-        }
-
-        throw SubscriptionManagementNotAllowedException::forSubscriber(
-            $subscriber->getMorphClass(),
-            $subscriber->getKey() ?? 'unsaved',
-        );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
