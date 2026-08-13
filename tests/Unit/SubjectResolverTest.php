@@ -88,6 +88,22 @@ it('delegates currentPlan to the owner via resolver', function (): void {
         ->and($plan->slug)->toBe('pro');
 });
 
+it('returns the resolved owner plan through instance and authenticated helpers', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
+
+    $this->service->subscribeTo($this->owner, $this->plan);
+    $this->actingAs($this->member);
+
+    expect($this->member->plan()?->slug)->toBe('pro')
+        ->and(FakeSubscriber::authenticatedPlan()?->slug)->toBe('pro')
+        ->and(FakeSubscriber::authenticatedHasActiveSubscription())->toBeTrue()
+        ->and(FakeSubscriber::authenticatedSubscriptionExpiresAt())->not->toBeNull();
+});
+
 it('delegates expiresAt to the owner via resolver', function (): void {
     SubscriptionManager::resolveSubjectUsing(function (Model $model) {
         return $model instanceof FakeSubscriber && $model->id === $this->member->id
@@ -191,21 +207,37 @@ it('resolves owner to itself when owner calls read methods', function (): void {
         ->and($this->manager->currentPlan($this->owner)?->slug)->toBe('pro');
 });
 
-// ─── Write methods NOT affected by resolver ─────────────────────────────
+// ─── Gestion d’abonnement réservée au propriétaire ───────────────────────
 
-it('subscribeTo writes on the explicit model, not the resolved subject', function (): void {
+it('identifies only the resolved owner as able to manage the subscription', function (): void {
     SubscriptionManager::resolveSubjectUsing(function (Model $model) {
         return $model instanceof FakeSubscriber && $model->id === $this->member->id
             ? $this->owner
             : $model;
     });
 
-    $this->manager->subscribeTo($this->member, $this->plan);
+    expect($this->manager->canManageSubscription($this->member))->toBeFalse()
+        ->and($this->member->canManageSubscription())->toBeFalse()
+        ->and($this->manager->canManageSubscription($this->owner))->toBeTrue()
+        ->and($this->owner->canManageSubscription())->toBeTrue();
+});
 
-    expect($this->member->subscription()->first())->not->toBeNull();
-    expect($this->owner->subscription()->first())->toBeNull();
+it('prevents a team member from starting a subscription through the manager or trait', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
 
-    expect($this->manager->hasActiveSubscription($this->member))->toBeFalse();
+    expect(fn () => $this->manager->subscribeTo($this->member, $this->plan))
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $this->member->subscribeTo($this->plan))
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $this->service->subscribeTo($this->member, $this->plan))
+        ->toThrow(SubscriptionManagementNotAllowedException::class);
+
+    expect($this->member->subscription()->first())->toBeNull()
+        ->and($this->owner->subscription()->first())->toBeNull();
 });
 
 it('cancel operates on the explicit model, not the resolved subject', function (): void {
@@ -222,18 +254,44 @@ it('cancel operates on the explicit model, not the resolved subject', function (
     expect($this->manager->hasActiveSubscription($this->member))->toBeFalse();
 });
 
-it('switchTo operates on the explicit model, not the resolved subject', function (): void {
+it('prevents direct subscription-model transitions for a team member', function (): void {
     SubscriptionManager::resolveSubjectUsing(function (Model $model) {
         return $model instanceof FakeSubscriber && $model->id === $this->member->id
             ? $this->owner
             : $model;
     });
 
-    $this->service->subscribeTo($this->member, $this->plan);
-    $this->manager->switchTo($this->member, $this->plan);
+    $legacySubscription = $this->member->subscription()->create([
+        'plan_id' => $this->plan->id,
+        'price' => $this->plan->price,
+        'status' => 'active',
+        'starts_at' => now(),
+        'ends_at' => now()->addMonth(),
+    ]);
 
-    expect($this->manager->hasActiveSubscription($this->member))->toBeFalse();
-    expect($this->member->subscription()->first())->not->toBeNull();
+    expect(fn () => $legacySubscription->cancel())
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $legacySubscription->suppress())
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $legacySubscription->renew())
+        ->toThrow(SubscriptionManagementNotAllowedException::class);
+});
+
+it('prevents a team member from changing, renewing, cancelling, or suppressing a subscription', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
+
+    expect(fn () => $this->manager->switchTo($this->member, $this->plan))
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $this->manager->renew($this->member))
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $this->manager->cancel($this->member))
+        ->toThrow(SubscriptionManagementNotAllowedException::class)
+        ->and(fn () => $this->manager->suppress($this->member))
+        ->toThrow(SubscriptionManagementNotAllowedException::class);
 });
 
 // ─── Shared quota pool ──────────────────────────────────────────────────

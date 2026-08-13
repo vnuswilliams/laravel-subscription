@@ -218,7 +218,7 @@ public function boot(): void
 - `$membre->hasActiveSubscription()` → vérifie l’abonnement du **propriétaire**
 - `$membre->canConsume('max-employees', 1)` → vérifie le quota du **propriétaire**
 - `$membre->consume('max-employees', 1)` → consomme depuis le quota du **propriétaire**
-- `$membre->subscribeTo('pro')` → écrit directement sur le **membre** (les opérations d’écriture ne sont jamais résolues)
+- `$membre->subscribeTo('pro')` → est refusé, car le membre ne possède pas l’abonnement mutualisé
 
 Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils résolvent tous vers l’abonnement du propriétaire.
 
@@ -226,8 +226,40 @@ Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils 
 
 - **La délégation est inconditionnelle.** Pour tout membre rattaché à une équipe dont il n’est pas le propriétaire, les opérations de lecture déléguent toujours vers le propriétaire — même si le membre possède son propre abonnement personnel. Une seule source de vérité par équipe : le propriétaire.
 - **Si l’utilisateur EST le propriétaire**, `$model->team->owner` retourne `$model` lui-même — aucun cas particulier à coder.
-- **Les opérations d’écriture (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) ne sont jamais résolues.** Elles opèrent toujours sur le modèle explicitement fourni. Cela empêche un membre de modifier silencieusement l’abonnement du propriétaire.
+- **Les opérations de gestion d’abonnement (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) sont réservées au propriétaire.** Lorsque le résolveur renvoie un propriétaire différent, le package lève `SubscriptionManagementNotAllowedException` au lieu de créer ou de modifier un abonnement personnel du membre.
+- **Utilisez `$user->canManageSubscription()` ou `Subscription::canManageSubscription($user)`** pour n’afficher les actions de gestion qu’au propriétaire autorisé.
 - **L’abonnement personnel d’un membre reste invisible** tant qu’il est membre non-propriétaire d’une équipe. Il redevient actif s’il quitte l’équipe ou en devient le propriétaire.
+
+### Protéger les routes de gestion d’abonnement
+
+Le middleware `subscription-owner` est enregistré automatiquement. Son alias par défaut peut être modifié dans le fichier publié `config/subscriptions.php` :
+
+```php
+'middleware' => [
+    'alias' => 'subscribed',
+    'owner_alias' => 'subscription-owner',
+],
+```
+
+Publiez la configuration si vous souhaitez personnaliser cet alias :
+
+```bash
+php artisan vendor:publish --tag=subscription-config
+```
+
+Ajoutez le middleware à toutes les routes qui créent, modifient, renouvellent, annulent ou suppriment un abonnement. Placez le middleware Laravel `auth` avant lui afin qu’un utilisateur authentifié soit disponible dans la requête :
+
+```php
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(['auth', 'subscription-owner'])->group(function () {
+    Route::post('/billing/subscribe', SubscribeController::class);
+    Route::patch('/billing/plan', SwitchPlanController::class);
+    Route::post('/billing/cancel', CancelSubscriptionController::class);
+});
+```
+
+Un membre non-propriétaire reçoit une réponse HTTP `403`. Cette vérification complète la protection du gestionnaire, qui bloque également les appels réalisés hors HTTP, par exemple dans un job, une action, un listener ou un appel direct du trait.
 
 ### Sans résolveur (compatibilité totale)
 
@@ -266,6 +298,21 @@ Subscription::balance($company, 'max-employees');
 ```
 
 Idéal dans les Controllers, les Actions, les Jobs ou les Listeners.
+
+Le trait fournit également des helpers pour l’utilisateur authentifié, afin d’éviter de répéter `auth()->user()` dans l’application :
+
+```php
+use App\Models\User;
+
+$user = User::currentUser();             // User|null
+$user = User::currentUserOrFail();       // User, ou AuthenticationException
+$isCurrent = $company->isCurrentUser();  // bool
+
+$plan = User::authenticatedPlan();     // Plan|null, plan du propriétaire si User est membre
+$plan = $user?->plan();                // Plan|null, plan effectif de cette instance
+```
+
+`currentUser()` retourne `null` si la requête n’est pas authentifiée ou si le modèle authentifié n’utilise pas ce trait. Utilisez `currentUserOrFail()` lorsque l’authentification est obligatoire. `plan()` retourne toujours le plan effectif de l’instance ; pour un membre non-propriétaire, il s’agit donc du plan du propriétaire de l’équipe. `authenticatedPlan()` est le helper direct lorsque vous avez seulement besoin du plan effectif de l’utilisateur connecté.
 
 ### 3. Via l’injection du SubscriptionManager (dans vos services)
 

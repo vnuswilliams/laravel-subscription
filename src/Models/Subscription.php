@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Vnuswilliams\Subscription\Enums\SubscriptionStatus;
 use Vnuswilliams\Subscription\Events\SubscriptionCanceled;
 use Vnuswilliams\Subscription\Events\SubscriptionExpired;
+use Vnuswilliams\Subscription\SubscriptionManager;
 
 final class Subscription extends Model
 {
@@ -113,9 +114,11 @@ final class Subscription extends Model
      */
     public function cancel(): static
     {
+        $this->ensureSubscriberCanManageSubscription();
+
         $this->update([
             'canceled_at' => now(),
-            'status'      => SubscriptionStatus::Canceled->value,
+            'status' => SubscriptionStatus::Canceled->value,
         ]);
 
         event(new SubscriptionCanceled($this));
@@ -128,9 +131,11 @@ final class Subscription extends Model
      */
     public function suppress(): static
     {
+        $this->ensureSubscriberCanManageSubscription();
+
         $this->update([
             'suppressed_at' => now(),
-            'status'        => SubscriptionStatus::Expired->value,
+            'status' => SubscriptionStatus::Expired->value,
         ]);
 
         event(new SubscriptionExpired($this));
@@ -143,21 +148,37 @@ final class Subscription extends Model
      */
     public function renew(): static
     {
-        $plan     = $this->plan;
-        $endsAt   = $plan->expiresAt(now());
+        $this->ensureSubscriberCanManageSubscription();
+
+        $plan = $this->plan;
+        $endsAt = $plan->expiresAt(now());
 
         $this->update([
-            'status'         => SubscriptionStatus::Active->value,
-            'starts_at'      => now(),
-            'ends_at'        => $endsAt,
-            'grace_ends_at'  => $endsAt && $plan->grace_days > 0
+            'status' => SubscriptionStatus::Active->value,
+            'starts_at' => now(),
+            'ends_at' => $endsAt,
+            'grace_ends_at' => $endsAt && $plan->grace_days > 0
                 ? Carbon::parse($endsAt)->addDays($plan->grace_days)
                 : null,
-            'canceled_at'    => null,
-            'suppressed_at'  => null,
+            'canceled_at' => null,
+            'suppressed_at' => null,
         ]);
 
         return $this;
+    }
+
+    /**
+     * @throws \Vnuswilliams\Subscription\Exceptions\SubscriptionManagementNotAllowedException
+     */
+    private function ensureSubscriberCanManageSubscription(): void
+    {
+        $subscriber = $this->subscriber;
+
+        if (! $subscriber instanceof Model) {
+            return;
+        }
+
+        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
     }
 
     /**
@@ -166,13 +187,13 @@ final class Subscription extends Model
     protected function casts(): array
     {
         return [
-            'price'        => 'decimal:' . (string) config('subscriptions.price.scale', 2),
-            'trial_ends_at'  => 'datetime',
-            'starts_at'      => 'datetime',
-            'ends_at'        => 'datetime',
-            'grace_ends_at'  => 'datetime',
-            'canceled_at'    => 'datetime',
-            'suppressed_at'  => 'datetime',
+            'price' => 'decimal:'.(string) config('subscriptions.price.scale', 2),
+            'trial_ends_at' => 'datetime',
+            'starts_at' => 'datetime',
+            'ends_at' => 'datetime',
+            'grace_ends_at' => 'datetime',
+            'canceled_at' => 'datetime',
+            'suppressed_at' => 'datetime',
         ];
     }
 }

@@ -240,7 +240,7 @@ public function boot(): void
 - `$member->hasActiveSubscription()` → checks the **owner's** subscription
 - `$member->canConsume('max-employees', 1)` → checks the **owner's** quota
 - `$member->consume('max-employees', 1)` → consumes from the **owner's** quota
-- `$member->subscribeTo('pro')` → writes on the **member** directly (write operations are never resolved)
+- `$member->subscribeTo('pro')` → is rejected because the member does not own the shared subscription
 
 The behavior is identical whether you call the facade (`Subscription::consume($member, ...)`), inject `SubscriptionManager`, or use the trait directly (`$member->consume(...)`). All team members therefore share the same quota pool, and every usage row is attached to the owner's subscription.
 
@@ -248,8 +248,40 @@ The behavior is identical whether you call the facade (`Subscription::consume($m
 
 - **Delegation is unconditional.** For any user attached to a team where they are not the owner, read operations always delegate to the owner — even if the member has their own personal subscription. One source of truth per team: the owner.
 - **If the user IS the owner**, `$model->team->owner` returns `$model` itself — no special case needed.
-- **Write operations (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) are never resolved.** They always operate on the model you explicitly pass. This prevents a team member from accidentally modifying the owner's subscription.
+- **Subscription-management operations (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) are owner-only.** When the resolver returns a different owner, the package throws `SubscriptionManagementNotAllowedException` instead of creating or changing a member's personal subscription.
+- **Use `$user->canManageSubscription()` or `Subscription::canManageSubscription($user)`** to conditionally display subscription-management controls.
 - **A member's personal subscription remains invisible** as long as they are a non-owner member of a team. It becomes active again if they leave the team or become the owner.
+
+### Protect subscription-management routes
+
+The `subscription-owner` middleware is registered automatically. Its default alias can be changed in the published `config/subscriptions.php` file:
+
+```php
+'middleware' => [
+    'alias' => 'subscribed',
+    'owner_alias' => 'subscription-owner',
+],
+```
+
+Publish the configuration if you need to customize the alias:
+
+```bash
+php artisan vendor:publish --tag=subscription-config
+```
+
+Apply the middleware to every route that starts, changes, renews, cancels, or suppresses a subscription. Keep Laravel's `auth` middleware before it so that the request has an authenticated user:
+
+```php
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(['auth', 'subscription-owner'])->group(function () {
+    Route::post('/billing/subscribe', SubscribeController::class);
+    Route::patch('/billing/plan', SwitchPlanController::class);
+    Route::post('/billing/cancel', CancelSubscriptionController::class);
+});
+```
+
+The middleware responds with HTTP `403` for a non-owner team member. It complements the manager-level protection, which also blocks calls made outside HTTP routes, such as jobs, actions, listeners, or direct trait calls.
 
 ### Without a resolver (full backward compatibility)
 
@@ -273,6 +305,21 @@ $company->balance('max-employees');
 ```
 
 Ideal in Observers, Policies, or quick checks inside a Controller.
+
+The trait also provides helpers for the authenticated model, so application code does not need to repeat `auth()->user()`:
+
+```php
+use App\Models\User;
+
+$user = User::currentUser();             // User|null
+$user = User::currentUserOrFail();       // User, or AuthenticationException
+$isCurrent = $company->isCurrentUser();  // bool
+
+$plan = User::authenticatedPlan();     // Plan|null, plan du owner si User est membre d’une team
+$plan = $user?->plan();                // Plan|null, plan effectif de cette instance
+```
+
+`currentUser()` returns `null` when the request is unauthenticated or the authenticated model is not the model on which the trait is used. Use `currentUserOrFail()` when authentication is required. `plan()` always returns the effective plan for the instance, which is the team owner’s plan for a non-owner member. `authenticatedPlan()` is the shorter context helper when you only need the authenticated user’s effective plan.
 
 ### 2. Via the Facade (anywhere in the app)
 
