@@ -89,6 +89,22 @@ it('delegates currentPlan to the owner via resolver', function (): void {
         ->and($plan->slug)->toBe('pro');
 });
 
+it('returns the resolved owner plan through instance and authenticated helpers', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
+
+    $this->service->subscribeTo($this->owner, $this->plan);
+    $this->actingAs($this->member);
+
+    expect($this->member->plan()?->slug)->toBe('pro')
+        ->and(FakeSubscriber::authenticatedPlan()?->slug)->toBe('pro')
+        ->and(FakeSubscriber::authenticatedHasActiveSubscription())->toBeTrue()
+        ->and(FakeSubscriber::authenticatedSubscriptionExpiresAt())->not->toBeNull();
+});
+
 it('delegates expiresAt to the owner via resolver', function (): void {
     SubscriptionManager::resolveSubjectUsing(function (Model $model) {
         return $model instanceof FakeSubscriber && $model->id === $this->member->id

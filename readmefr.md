@@ -308,10 +308,11 @@ $user = User::currentUser();             // User|null
 $user = User::currentUserOrFail();       // User, ou AuthenticationException
 $isCurrent = $company->isCurrentUser();  // bool
 
-$plan = User::currentUser()?->currentPlan();
+$plan = User::authenticatedPlan();     // Plan|null, plan du propriétaire si User est membre
+$plan = $user?->plan();                // Plan|null, plan effectif de cette instance
 ```
 
-`currentUser()` retourne `null` si la requête n’est pas authentifiée ou si le modèle authentifié n’utilise pas ce trait. Utilisez `currentUserOrFail()` lorsque l’authentification est obligatoire.
+`currentUser()` retourne `null` si la requête n’est pas authentifiée ou si le modèle authentifié n’utilise pas ce trait. Utilisez `currentUserOrFail()` lorsque l’authentification est obligatoire. `plan()` retourne toujours le plan effectif de l’instance ; pour un membre non-propriétaire, il s’agit donc du plan du propriétaire de l’équipe. `authenticatedPlan()` est le helper direct lorsque vous avez seulement besoin du plan effectif de l’utilisateur connecté.
 
 ### 3. Via l’injection du SubscriptionManager (dans vos services)
 

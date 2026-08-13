@@ -315,10 +315,11 @@ $user = User::currentUser();             // User|null
 $user = User::currentUserOrFail();       // User, or AuthenticationException
 $isCurrent = $company->isCurrentUser();  // bool
 
-$plan = User::currentUser()?->currentPlan();
+$plan = User::authenticatedPlan();     // Plan|null, plan du owner si User est membre d’une team
+$plan = $user?->plan();                // Plan|null, plan effectif de cette instance
 ```
 
-`currentUser()` returns `null` when the request is unauthenticated or the authenticated model is not the model on which the trait is used. Use `currentUserOrFail()` when authentication is required.
+`currentUser()` returns `null` when the request is unauthenticated or the authenticated model is not the model on which the trait is used. Use `currentUserOrFail()` when authentication is required. `plan()` always returns the effective plan for the instance, which is the team owner’s plan for a non-owner member. `authenticatedPlan()` is the shorter context helper when you only need the authenticated user’s effective plan.
 
 ### 2. Via the Facade (anywhere in the app)
 
