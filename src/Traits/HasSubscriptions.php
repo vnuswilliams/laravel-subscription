@@ -9,11 +9,14 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Models\Subscription;
 use Vnuswilliams\Subscription\Models\SubscriptionUsage;
-use Vnuswilliams\Subscription\Services\FeatureService;
-use Vnuswilliams\Subscription\Services\SubscriptionService;
+use Vnuswilliams\Subscription\SubscriptionManager;
 
 /**
  * À ajouter sur tout modèle souscripteur : User, Company, Team…
+ *
+ * Les opérations de lecture et de consommation passent par SubscriptionManager.
+ * Ainsi, lorsqu'un subject resolver est configuré, un membre de team utilise
+ * automatiquement l'abonnement et le quota du propriétaire de sa team.
  *
  * @mixin \Illuminate\Database\Eloquent\Model
  */
@@ -33,54 +36,60 @@ trait HasSubscriptions
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Souscription / actions
+    //  Souscription / actions (toujours sur ce modèle, jamais résolues)
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function subscribeTo(string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
-    {
-        return app(SubscriptionService::class)->subscribeTo($this, $plan, $expiration, $immediately, $price);
+    public function subscribeTo(
+        string|Plan $plan,
+        ?Carbon $expiration = null,
+        bool $immediately = true,
+        int|float|string|null $price = null
+    ): Subscription {
+        return app(SubscriptionManager::class)->subscribeTo($this, $plan, $expiration, $immediately, $price);
     }
 
-    public function switchTo(string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
-    {
-        return app(SubscriptionService::class)->switchTo($this, $plan, $immediately, $price);
+    public function switchTo(
+        string|Plan $plan,
+        bool $immediately = true,
+        int|float|string|null $price = null
+    ): Subscription {
+        return app(SubscriptionManager::class)->switchTo($this, $plan, $immediately, $price);
     }
 
     public function renewSubscription(): Subscription
     {
-        return app(SubscriptionService::class)->renew($this);
+        return app(SubscriptionManager::class)->renew($this);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  État
+    //  État (résolution vers le propriétaire de l'abonnement)
     // ─────────────────────────────────────────────────────────────────────────
 
     public function hasActiveSubscription(): bool
     {
-        return app(SubscriptionService::class)->hasActiveSubscription($this);
+        return app(SubscriptionManager::class)->hasActiveSubscription($this);
     }
 
     public function currentPlan(): ?Plan
     {
-        return app(SubscriptionService::class)->currentPlan($this);
+        return app(SubscriptionManager::class)->currentPlan($this);
     }
 
     public function subscriptionExpiresAt(): ?Carbon
     {
-        return app(SubscriptionService::class)->expiresAt($this);
+        return app(SubscriptionManager::class)->expiresAt($this);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Features & Quotas
+    //  Features & Quotas (résolution vers le propriétaire de l'abonnement)
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * L'accès à une feature est-il autorisé ? Et le quota suffisant ?
-     * Équivalent de canConsume() de ton ancien package.
      */
     public function canConsume(string $featureSlug, int $amount = 1): bool
     {
-        return app(FeatureService::class)->canConsume($this, $featureSlug, $amount);
+        return app(SubscriptionManager::class)->canConsume($this, $featureSlug, $amount);
     }
 
     /**
@@ -88,7 +97,7 @@ trait HasSubscriptions
      */
     public function consume(string $featureSlug, int $amount = 1): SubscriptionUsage
     {
-        return app(FeatureService::class)->consume($this, $featureSlug, $amount);
+        return app(SubscriptionManager::class)->consume($this, $featureSlug, $amount);
     }
 
     /**
@@ -96,7 +105,7 @@ trait HasSubscriptions
      */
     public function release(string $featureSlug, int $amount = 1): SubscriptionUsage
     {
-        return app(FeatureService::class)->release($this, $featureSlug, $amount);
+        return app(SubscriptionManager::class)->release($this, $featureSlug, $amount);
     }
 
     /**
@@ -105,7 +114,7 @@ trait HasSubscriptions
      */
     public function balance(string $featureSlug): int
     {
-        return app(FeatureService::class)->balance($this, $featureSlug);
+        return app(SubscriptionManager::class)->balance($this, $featureSlug);
     }
 
     /**
@@ -113,7 +122,7 @@ trait HasSubscriptions
      */
     public function totalCharges(string $featureSlug): int
     {
-        return app(FeatureService::class)->totalCharges($this, $featureSlug);
+        return app(SubscriptionManager::class)->totalCharges($this, $featureSlug);
     }
 
     /**
@@ -121,6 +130,6 @@ trait HasSubscriptions
      */
     public function usedCharges(string $featureSlug): int
     {
-        return app(FeatureService::class)->usedCharges($this, $featureSlug);
+        return app(SubscriptionManager::class)->usedCharges($this, $featureSlug);
     }
 }

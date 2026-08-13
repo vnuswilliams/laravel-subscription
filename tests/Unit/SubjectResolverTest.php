@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Database\Eloquent\Model;
 use Vnuswilliams\Subscription\Enums\FeatureType;
-use Vnuswilliams\Subscription\Enums\SubscriptionStatus;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
 use Vnuswilliams\Subscription\SubscriptionManager;
@@ -20,27 +19,27 @@ beforeEach(function (): void {
     });
 
     $this->plan = Plan::create([
-        'name'             => 'Pro',
-        'slug'             => 'pro',
+        'name' => 'Pro',
+        'slug' => 'pro',
         'periodicity_type' => 'month',
-        'periodicity'      => 1,
-        'price'            => 19.99,
-        'trial_days'       => 0,
-        'grace_days'       => 7,
-        'is_active'        => true,
+        'periodicity' => 1,
+        'price' => 19.99,
+        'trial_days' => 0,
+        'grace_days' => 7,
+        'is_active' => true,
     ]);
 
     $this->plan->features()->create([
-        'slug'    => 'max-employees',
-        'name'    => 'Max Employees',
-        'type'    => FeatureType::Consumable->value,
+        'slug' => 'max-employees',
+        'name' => 'Max Employees',
+        'type' => FeatureType::Consumable->value,
         'charges' => 10,
     ]);
 
-    $this->owner    = FakeSubscriber::create(['id' => 1]);
-    $this->member   = FakeSubscriber::create(['id' => 2]);
-    $this->service  = app(SubscriptionService::class);
-    $this->manager  = app(SubscriptionManager::class);
+    $this->owner = FakeSubscriber::create(['id' => 1]);
+    $this->member = FakeSubscriber::create(['id' => 2]);
+    $this->service = app(SubscriptionService::class);
+    $this->manager = app(SubscriptionManager::class);
 });
 
 afterEach(function (): void {
@@ -253,6 +252,51 @@ it('all team members share the same quota pool via the owner', function (): void
     expect($this->manager->balance($this->member, 'max-employees'))->toBe(7)
         ->and($this->manager->balance($this->owner, 'max-employees'))->toBe(7)
         ->and($this->manager->usedCharges($this->owner, 'max-employees'))->toBe(3);
+});
+
+// ─── Trait HasSubscriptions + owner de team ──────────────────────────────
+
+it('routes trait reads and quota consumption to the team owner', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
+
+    $this->owner->subscribeTo($this->plan);
+
+    expect($this->member->hasActiveSubscription())->toBeTrue()
+        ->and($this->member->currentPlan()?->slug)->toBe('pro')
+        ->and($this->member->subscriptionExpiresAt())->not->toBeNull()
+        ->and($this->member->canConsume('max-employees', 4))->toBeTrue()
+        ->and($this->member->totalCharges('max-employees'))->toBe(10)
+        ->and($this->member->balance('max-employees'))->toBe(10);
+
+    $usage = $this->member->consume('max-employees', 4);
+
+    expect($usage->subscription_id)->toBe($this->owner->subscription()->firstOrFail()->id)
+        ->and($this->member->usedCharges('max-employees'))->toBe(4)
+        ->and($this->owner->usedCharges('max-employees'))->toBe(4)
+        ->and($this->member->balance('max-employees'))->toBe(6);
+
+    $this->member->release('max-employees', 2);
+
+    expect($this->owner->usedCharges('max-employees'))->toBe(2)
+        ->and($this->member->balance('max-employees'))->toBe(8);
+});
+
+it('keeps trait subscription writes on the explicit team member', function (): void {
+    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
+        return $model instanceof FakeSubscriber && $model->id === $this->member->id
+            ? $this->owner
+            : $model;
+    });
+
+    $this->member->subscribeTo($this->plan);
+
+    expect($this->member->subscription()->first())->not->toBeNull()
+        ->and($this->owner->subscription()->first())->toBeNull()
+        ->and($this->member->hasActiveSubscription())->toBeFalse();
 });
 
 // ─── flushSubjectResolver ───────────────────────────────────────────────
