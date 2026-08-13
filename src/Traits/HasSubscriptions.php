@@ -36,8 +36,13 @@ trait HasSubscriptions
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Souscription / actions (toujours sur ce modèle, jamais résolues)
+    //  Souscription / actions (propriétaire uniquement avec un resolver d'équipe)
     // ─────────────────────────────────────────────────────────────────────────
+
+    public function canManageSubscription(): bool
+    {
+        return app(SubscriptionManager::class)->canManageSubscription($this);
+    }
 
     public function subscribeTo(
         string|Plan $plan,

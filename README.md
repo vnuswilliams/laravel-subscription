@@ -240,7 +240,7 @@ public function boot(): void
 - `$member->hasActiveSubscription()` → checks the **owner's** subscription
 - `$member->canConsume('max-employees', 1)` → checks the **owner's** quota
 - `$member->consume('max-employees', 1)` → consumes from the **owner's** quota
-- `$member->subscribeTo('pro')` → writes on the **member** directly (write operations are never resolved)
+- `$member->subscribeTo('pro')` → is rejected because the member does not own the shared subscription
 
 The behavior is identical whether you call the facade (`Subscription::consume($member, ...)`), inject `SubscriptionManager`, or use the trait directly (`$member->consume(...)`). All team members therefore share the same quota pool, and every usage row is attached to the owner's subscription.
 
@@ -248,8 +248,20 @@ The behavior is identical whether you call the facade (`Subscription::consume($m
 
 - **Delegation is unconditional.** For any user attached to a team where they are not the owner, read operations always delegate to the owner — even if the member has their own personal subscription. One source of truth per team: the owner.
 - **If the user IS the owner**, `$model->team->owner` returns `$model` itself — no special case needed.
-- **Write operations (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) are never resolved.** They always operate on the model you explicitly pass. This prevents a team member from accidentally modifying the owner's subscription.
+- **Subscription-management operations (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) are owner-only.** When the resolver returns a different owner, the package throws `SubscriptionManagementNotAllowedException` instead of creating or changing a member's personal subscription.
+- **Use `$user->canManageSubscription()` or `Subscription::canManageSubscription($user)`** to conditionally display subscription-management controls.
 - **A member's personal subscription remains invisible** as long as they are a non-owner member of a team. It becomes active again if they leave the team or become the owner.
+
+### Protect subscription-management routes
+
+The `subscription-owner` middleware is registered automatically. Apply it to every route that starts, changes, renews, cancels, or suppresses a subscription:
+
+```php
+Route::post('/billing/subscribe', SubscribeController::class)
+    ->middleware('subscription-owner');
+```
+
+The middleware responds with HTTP `403` for a non-owner team member. It complements the manager-level protection, which also blocks calls made outside HTTP routes, such as jobs, actions, listeners, or direct trait calls.
 
 ### Without a resolver (full backward compatibility)
 

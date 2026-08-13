@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Vnuswilliams\Subscription;
 
-use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +12,7 @@ use Illuminate\Support\ServiceProvider;
 use Vnuswilliams\Subscription\Console\Commands\CheckSubscriptionLifecycle;
 use Vnuswilliams\Subscription\Console\Commands\InstallSubscriptionPackage;
 use Vnuswilliams\Subscription\Http\Middleware\CheckSubscription;
+use Vnuswilliams\Subscription\Http\Middleware\EnsureCanManageSubscription;
 use Vnuswilliams\Subscription\Services\FeatureService;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
 
@@ -21,7 +21,7 @@ final class SubscriptionServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__ . '/../config/subscriptions.php',
+            __DIR__.'/../config/subscriptions.php',
             'subscriptions'
         );
 
@@ -51,23 +51,23 @@ final class SubscriptionServiceProvider extends ServiceProvider
     private function publishConfig(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/subscriptions.php' => config_path('subscriptions.php'),
+            __DIR__.'/../config/subscriptions.php' => config_path('subscriptions.php'),
         ], 'subscription-config');
     }
 
     private function publishMigrations(): void
     {
         $this->publishes([
-            __DIR__ . '/../database/migrations' => database_path('migrations'),
+            __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'subscription-migrations');
 
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
     }
 
     private function publishStubs(): void
     {
         $this->publishes([
-            __DIR__ . '/../stubs/SubscriptionService.stub' => app_path('Services/SubscriptionService.php'),
+            __DIR__.'/../stubs/SubscriptionService.stub' => app_path('Services/SubscriptionService.php'),
         ], 'subscription-stubs');
     }
 
@@ -76,9 +76,11 @@ final class SubscriptionServiceProvider extends ServiceProvider
         /** @var Router $router */
         $router = $this->app->make(Router::class);
 
-        $alias = config('subscriptions.middleware.alias', 'subscribed');
+        $subscriptionAlias = config('subscriptions.middleware.alias', 'subscribed');
+        $ownerAlias = config('subscriptions.middleware.owner_alias', 'subscription-owner');
 
-        $router->aliasMiddleware($alias, CheckSubscription::class);
+        $router->aliasMiddleware($subscriptionAlias, CheckSubscription::class);
+        $router->aliasMiddleware($ownerAlias, EnsureCanManageSubscription::class);
     }
 
     private function registerCommands(): void

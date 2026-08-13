@@ -11,9 +11,9 @@ return [
     | Personnalisez les noms de tables pour éviter les collisions.
     */
     'tables' => [
-        'plans'              => 'plans',
-        'plan_features'      => 'plan_features',
-        'subscriptions'      => 'subscriptions',
+        'plans' => 'plans',
+        'plan_features' => 'plan_features',
+        'subscriptions' => 'subscriptions',
         'subscription_usages' => 'subscription_usages',
     ],
 
@@ -24,9 +24,9 @@ return [
     | Vous pouvez étendre les modèles du package et pointer ici vers les vôtres.
     */
     'models' => [
-        'plan'               => \Vnuswilliams\Subscription\Models\Plan::class,
-        'plan_feature'       => \Vnuswilliams\Subscription\Models\PlanFeature::class,
-        'subscription'       => \Vnuswilliams\Subscription\Models\Subscription::class,
+        'plan' => \Vnuswilliams\Subscription\Models\Plan::class,
+        'plan_feature' => \Vnuswilliams\Subscription\Models\PlanFeature::class,
+        'subscription' => \Vnuswilliams\Subscription\Models\Subscription::class,
         'subscription_usage' => \Vnuswilliams\Subscription\Models\SubscriptionUsage::class,
     ],
 
@@ -47,7 +47,7 @@ return [
     */
     'price' => [
         'precision' => 12,
-        'scale'     => 2,
+        'scale' => 2,
     ],
 
     /*
@@ -65,6 +65,7 @@ return [
     */
     'middleware' => [
         'alias' => 'subscribed',
+        'owner_alias' => 'subscription-owner',
     ],
 
 ];

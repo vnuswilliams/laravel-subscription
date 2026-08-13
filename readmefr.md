@@ -218,7 +218,7 @@ public function boot(): void
 - `$membre->hasActiveSubscription()` → vérifie l’abonnement du **propriétaire**
 - `$membre->canConsume('max-employees', 1)` → vérifie le quota du **propriétaire**
 - `$membre->consume('max-employees', 1)` → consomme depuis le quota du **propriétaire**
-- `$membre->subscribeTo('pro')` → écrit directement sur le **membre** (les opérations d’écriture ne sont jamais résolues)
+- `$membre->subscribeTo('pro')` → est refusé, car le membre ne possède pas l’abonnement mutualisé
 
 Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils résolvent tous vers l’abonnement du propriétaire.
 
@@ -226,8 +226,20 @@ Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils 
 
 - **La délégation est inconditionnelle.** Pour tout membre rattaché à une équipe dont il n’est pas le propriétaire, les opérations de lecture déléguent toujours vers le propriétaire — même si le membre possède son propre abonnement personnel. Une seule source de vérité par équipe : le propriétaire.
 - **Si l’utilisateur EST le propriétaire**, `$model->team->owner` retourne `$model` lui-même — aucun cas particulier à coder.
-- **Les opérations d’écriture (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) ne sont jamais résolues.** Elles opèrent toujours sur le modèle explicitement fourni. Cela empêche un membre de modifier silencieusement l’abonnement du propriétaire.
+- **Les opérations de gestion d’abonnement (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) sont réservées au propriétaire.** Lorsque le résolveur renvoie un propriétaire différent, le package lève `SubscriptionManagementNotAllowedException` au lieu de créer ou de modifier un abonnement personnel du membre.
+- **Utilisez `$user->canManageSubscription()` ou `Subscription::canManageSubscription($user)`** pour n’afficher les actions de gestion qu’au propriétaire autorisé.
 - **L’abonnement personnel d’un membre reste invisible** tant qu’il est membre non-propriétaire d’une équipe. Il redevient actif s’il quitte l’équipe ou en devient le propriétaire.
+
+### Protéger les routes de gestion d’abonnement
+
+Le middleware `subscription-owner` est enregistré automatiquement. Ajoutez-le à toute route qui crée, modifie, renouvelle, annule ou supprime un abonnement :
+
+```php
+Route::post('/billing/subscribe', SubscribeController::class)
+    ->middleware('subscription-owner');
+```
+
+Un membre non-propriétaire reçoit une réponse HTTP `403`. Cette vérification complète la protection du gestionnaire, qui bloque également les appels réalisés hors HTTP, par exemple dans un job, une action, un listener ou un appel direct du trait.
 
 ### Sans résolveur (compatibilité totale)
 
