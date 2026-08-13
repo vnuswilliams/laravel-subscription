@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Vnuswilliams\Subscription\Traits;
 
 use Carbon\Carbon;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Support\Facades\Auth;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Models\Subscription;
 use Vnuswilliams\Subscription\Models\SubscriptionUsage;
@@ -22,6 +25,50 @@ use Vnuswilliams\Subscription\SubscriptionManager;
  */
 trait HasSubscriptions
 {
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Utilisateur authentifié
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Retourne l'utilisateur authentifié s'il utilise ce trait.
+     *
+     * Exemple : `User::currentUser()?->currentPlan()`.
+     *
+     * @return static|null
+     */
+    public static function currentUser(): ?static
+    {
+        $user = Auth::user();
+
+        return $user instanceof static ? $user : null;
+    }
+
+    /**
+     * Retourne l'utilisateur authentifié ou lève une exception s'il n'y en a pas.
+     *
+     * @throws AuthenticationException
+     */
+    public static function currentUserOrFail(): static
+    {
+        $user = static::currentUser();
+
+        if ($user === null) {
+            throw new AuthenticationException('Unauthenticated.');
+        }
+
+        return $user;
+    }
+
+    /**
+     * Indique si ce modèle est l'utilisateur actuellement authentifié.
+     */
+    public function isCurrentUser(): bool
+    {
+        $user = Auth::user();
+
+        return $user instanceof Model && $this->is($user);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  Relation
     // ─────────────────────────────────────────────────────────────────────────

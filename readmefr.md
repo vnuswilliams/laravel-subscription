@@ -232,11 +232,31 @@ Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils 
 
 ### Protéger les routes de gestion d’abonnement
 
-Le middleware `subscription-owner` est enregistré automatiquement. Ajoutez-le à toute route qui crée, modifie, renouvelle, annule ou supprime un abonnement :
+Le middleware `subscription-owner` est enregistré automatiquement. Son alias par défaut peut être modifié dans le fichier publié `config/subscriptions.php` :
 
 ```php
-Route::post('/billing/subscribe', SubscribeController::class)
-    ->middleware('subscription-owner');
+'middleware' => [
+    'alias' => 'subscribed',
+    'owner_alias' => 'subscription-owner',
+],
+```
+
+Publiez la configuration si vous souhaitez personnaliser cet alias :
+
+```bash
+php artisan vendor:publish --tag=subscription-config
+```
+
+Ajoutez le middleware à toutes les routes qui créent, modifient, renouvellent, annulent ou suppriment un abonnement. Placez le middleware Laravel `auth` avant lui afin qu’un utilisateur authentifié soit disponible dans la requête :
+
+```php
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(['auth', 'subscription-owner'])->group(function () {
+    Route::post('/billing/subscribe', SubscribeController::class);
+    Route::patch('/billing/plan', SwitchPlanController::class);
+    Route::post('/billing/cancel', CancelSubscriptionController::class);
+});
 ```
 
 Un membre non-propriétaire reçoit une réponse HTTP `403`. Cette vérification complète la protection du gestionnaire, qui bloque également les appels réalisés hors HTTP, par exemple dans un job, une action, un listener ou un appel direct du trait.
@@ -278,6 +298,20 @@ Subscription::balance($company, 'max-employees');
 ```
 
 Idéal dans les Controllers, les Actions, les Jobs ou les Listeners.
+
+Le trait fournit également des helpers pour l’utilisateur authentifié, afin d’éviter de répéter `auth()->user()` dans l’application :
+
+```php
+use App\Models\User;
+
+$user = User::currentUser();             // User|null
+$user = User::currentUserOrFail();       // User, ou AuthenticationException
+$isCurrent = $company->isCurrentUser();  // bool
+
+$plan = User::currentUser()?->currentPlan();
+```
+
+`currentUser()` retourne `null` si la requête n’est pas authentifiée ou si le modèle authentifié n’utilise pas ce trait. Utilisez `currentUserOrFail()` lorsque l’authentification est obligatoire.
 
 ### 3. Via l’injection du SubscriptionManager (dans vos services)
 
