@@ -203,6 +203,41 @@ That's it. The trait automatically exposes the `subscription()` relationship and
 
 ---
 
+## Subscriber Resolver and Global Helpers
+
+Global helpers resolve the subscriber through `SubscriberResolver` by default. The package's default implementation, `AuthSubscriberResolver`, returns `auth()->user()`.
+
+```php
+use Vnuswilliams\Subscription\Contracts\SubscriberResolver;
+use Vnuswilliams\Subscription\Resolvers\AuthSubscriberResolver;
+
+// Registered by the package:
+$this->app->bind(SubscriberResolver::class, AuthSubscriberResolver::class);
+```
+
+The binding is intentionally overridable. An application that subscribes a `Company` instead of the authenticated `User` can replace it in its own service provider:
+
+```php
+$this->app->bind(SubscriberResolver::class, CompanySubscriberResolver::class);
+```
+
+The helpers validate that the resolved model uses `HasSubscriptions`. Pass a model as the final argument to bypass the resolver:
+
+```php
+subscribeTo('pro');
+currentPlan();
+hasActiveSubscription();
+canConsume('max-employees', 1);
+
+currentPlan($company);
+canConsume('max-employees', 1, $company);
+subscribeTo('pro', subscriber: $company);
+```
+
+The complete helper set mirrors the public trait methods: `subscribeTo`, `switchTo`, `renewSubscription`, `hasActiveSubscription`, `currentPlan`, `subscriptionExpiresAt`, `canConsume`, `consume`, `release`, `balance`, `totalCharges`, and `usedCharges`. If no subscriber can be resolved, or if the resolved model does not use `HasSubscriptions`, the package throws `InvalidSubscriberException` with an explicit message.
+
+---
+
 ## Entry Points: Three Ways to Use the Package
 
 The package exposes three interfaces depending on your context. Choose the one that fits your situation.

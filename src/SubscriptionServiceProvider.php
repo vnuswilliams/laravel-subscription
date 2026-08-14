@@ -8,7 +8,9 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Vnuswilliams\Subscription\Console\Commands\CheckSubscriptionLifecycle;
 use Vnuswilliams\Subscription\Console\Commands\InstallSubscriptionPackage;
+use Vnuswilliams\Subscription\Contracts\SubscriberResolver;
 use Vnuswilliams\Subscription\Http\Middleware\CheckSubscription;
+use Vnuswilliams\Subscription\Resolvers\AuthSubscriberResolver;
 use Vnuswilliams\Subscription\Services\FeatureService;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
 
@@ -17,13 +19,17 @@ final class SubscriptionServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__ . '/../config/subscriptions.php',
+            __DIR__.'/../config/subscriptions.php',
             'subscriptions'
         );
 
         // Services internes (logique métier)
         $this->app->singleton(SubscriptionService::class);
         $this->app->singleton(FeatureService::class);
+
+        // Resolver par défaut. L'application consommatrice peut remplacer ce
+        // binding dans son propre ServiceProvider (ex: Company au lieu de User).
+        $this->app->bind(SubscriberResolver::class, AuthSubscriberResolver::class);
 
         // Manager : point d'entrée public du package (Facade + injection)
         $this->app->singleton(SubscriptionManager::class, function ($app): SubscriptionManager {
@@ -46,23 +52,23 @@ final class SubscriptionServiceProvider extends ServiceProvider
     private function publishConfig(): void
     {
         $this->publishes([
-            __DIR__ . '/../config/subscriptions.php' => config_path('subscriptions.php'),
+            __DIR__.'/../config/subscriptions.php' => config_path('subscriptions.php'),
         ], 'subscription-config');
     }
 
     private function publishMigrations(): void
     {
         $this->publishes([
-            __DIR__ . '/../database/migrations' => database_path('migrations'),
+            __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'subscription-migrations');
 
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
     }
 
     private function publishStubs(): void
     {
         $this->publishes([
-            __DIR__ . '/../stubs/SubscriptionService.stub' => app_path('Services/SubscriptionService.php'),
+            __DIR__.'/../stubs/SubscriptionService.stub' => app_path('Services/SubscriptionService.php'),
         ], 'subscription-stubs');
     }
 
