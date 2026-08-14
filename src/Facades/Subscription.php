@@ -13,7 +13,6 @@ use Vnuswilliams\Subscription\SubscriptionManager;
  * @method static \Vnuswilliams\Subscription\Models\Subscription  renew(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static \Vnuswilliams\Subscription\Models\Subscription  cancel(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static \Vnuswilliams\Subscription\Models\Subscription  suppress(\Illuminate\Database\Eloquent\Model $subscriber)
- * @method static bool                                             canManageSubscription(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static bool                                             hasActiveSubscription(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static \Vnuswilliams\Subscription\Models\Plan|null     currentPlan(\Illuminate\Database\Eloquent\Model $subscriber)
  * @method static \Carbon\Carbon|null                             expiresAt(\Illuminate\Database\Eloquent\Model $subscriber)

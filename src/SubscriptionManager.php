@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Vnuswilliams\Subscription;
 
-use Carbon\Carbon;
 use Closure;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
-use Vnuswilliams\Subscription\Exceptions\SubscriptionManagementNotAllowedException;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Models\Subscription;
 use Vnuswilliams\Subscription\Models\SubscriptionUsage;
@@ -26,9 +25,8 @@ final class SubscriptionManager
 
     public function __construct(
         private readonly SubscriptionService $subscriptions,
-        private readonly FeatureService $features,
-    ) {
-    }
+        private readonly FeatureService      $features,
+    ) {}
 
     /**
      * Permet à l'application hôte de définir comment résoudre
@@ -48,92 +46,40 @@ final class SubscriptionManager
     }
 
     /**
-     * Indique si ce modèle est autorisé à administrer l'abonnement qu'il utilise.
-     *
-     * Sans resolver, le modèle est son propre propriétaire. Lorsqu'un resolver
-     * renvoie le propriétaire d'une team, seul ce propriétaire peut effectuer
-     * les opérations d'écriture sur l'abonnement mutualisé.
-     */
-    public static function canManageSubscriptionFor(Model $subscriber): bool
-    {
-        return static::resolveSubjectFor($subscriber)->is($subscriber);
-    }
-
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
-    public static function ensureCanManageSubscriptionFor(Model $subscriber): void
-    {
-        if (static::canManageSubscriptionFor($subscriber)) {
-            return;
-        }
-
-        throw SubscriptionManagementNotAllowedException::forSubscriber(
-            $subscriber->getMorphClass(),
-            $subscriber->getKey() ?? 'unsaved',
-        );
-    }
-
-    /**
      * Résout le sujet effectif porteur d'abonnement.
      * Si aucun resolver n'est configuré, retourne le modèle tel quel.
      */
-    protected static function resolveSubjectFor(Model $model): Model
+    protected function resolveSubject(Model $model): Model
     {
         return static::$subjectResolver
             ? (static::$subjectResolver)($model)
             : $model;
     }
 
-    public function canManageSubscription(Model $subscriber): bool
-    {
-        return static::canManageSubscriptionFor($subscriber);
-    }
-
-    protected function resolveSubject(Model $model): Model
-    {
-        return static::resolveSubjectFor($model);
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
-    //  Souscription / cycle de vie (WRITE — propriétaire uniquement)
+    //  Souscription / cycle de vie (WRITE — pas de résolution)
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
     public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
         return $this->subscriptions->subscribeTo($subscriber, $plan, $expiration, $immediately, $price);
     }
 
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
     public function switchTo(Model $subscriber, string|Plan $plan, bool $immediately = true, int|float|string|null $price = null): Subscription
     {
         return $this->subscriptions->switchTo($subscriber, $plan, $immediately, $price);
     }
 
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
     public function renew(Model $subscriber): Subscription
     {
         return $this->subscriptions->renew($subscriber);
     }
 
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
     public function cancel(Model $subscriber): Subscription
     {
         return $this->subscriptions->cancel($subscriber);
     }
 
-    /**
-     * @throws SubscriptionManagementNotAllowedException
-     */
     public function suppress(Model $subscriber): Subscription
     {
         return $this->subscriptions->suppress($subscriber);
