@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Vnuswilliams\Subscription\Tests;
 
+use Illuminate\Filesystem\Filesystem;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 use Vnuswilliams\Subscription\SubscriptionServiceProvider;
 
@@ -13,7 +14,9 @@ abstract class TestCase extends OrchestraTestCase
     {
         parent::setUp();
 
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        $this->app->instance('files', new Filesystem());
+
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
         $this->artisan('migrate', ['--database' => 'testing']);
     }
@@ -34,9 +37,9 @@ abstract class TestCase extends OrchestraTestCase
     {
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', [
-            'driver'   => 'sqlite',
+            'driver' => 'sqlite',
             'database' => ':memory:',
-            'prefix'   => '',
+            'prefix' => '',
         ]);
     }
 }

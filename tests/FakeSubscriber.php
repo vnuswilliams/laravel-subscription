@@ -45,7 +45,9 @@ final class FakeSubscriber extends Model implements Authenticatable
         return null;
     }
 
-    public function setRememberToken($value): void {}
+    public function setRememberToken($value): void
+    {
+    }
 
     public function getRememberTokenName(): string
     {

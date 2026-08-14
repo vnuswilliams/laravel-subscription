@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Carbon\Carbon;
 use Vnuswilliams\Subscription\Enums\SubscriptionStatus;
 use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
@@ -18,25 +17,25 @@ beforeEach(function (): void {
     });
 
     $this->plan = Plan::create([
-        'name'             => 'Pro',
-        'slug'             => 'pro',
+        'name' => 'Pro',
+        'slug' => 'pro',
+        'price' => 19.99,
         'periodicity_type' => 'month',
-        'periodicity'      => 1,
-        'price'            => 19.99,
-        'trial_days'       => 0,
-        'grace_days'       => 7,
-        'is_active'        => true,
+        'periodicity' => 1,
+        'trial_days' => 0,
+        'grace_days' => 7,
+        'is_active' => true,
     ]);
 
     $this->subscriber = FakeSubscriber::create([]);
-    $this->service    = app(SubscriptionService::class);
+    $this->service = app(SubscriptionService::class);
 });
 
 it('grants access during grace period', function (): void {
     $sub = $this->service->subscribeTo($this->subscriber, $this->plan);
     $sub->update([
-        'status'        => SubscriptionStatus::OnGracePeriod->value,
-        'ends_at'       => now()->subDay(),
+        'status' => SubscriptionStatus::OnGracePeriod->value,
+        'ends_at' => now()->subDay(),
         'grace_ends_at' => now()->addDays(5),
     ]);
 
@@ -46,8 +45,8 @@ it('grants access during grace period', function (): void {
 it('denies access after grace period ends', function (): void {
     $sub = $this->service->subscribeTo($this->subscriber, $this->plan);
     $sub->update([
-        'status'        => SubscriptionStatus::Expired->value,
-        'ends_at'       => now()->subDays(10),
+        'status' => SubscriptionStatus::Expired->value,
+        'ends_at' => now()->subDays(10),
         'grace_ends_at' => now()->subDays(3),
         'suppressed_at' => now()->subDays(3),
     ]);
@@ -55,13 +54,13 @@ it('denies access after grace period ends', function (): void {
     expect($this->service->hasActiveSubscription($this->subscriber))->toBeFalse();
 });
 
-it('denies access to canceled subscription outside its active window', function (): void {
+it('grants access to canceled subscription within its period', function (): void {
     $sub = $this->service->subscribeTo($this->subscriber, $this->plan);
     $sub->update([
         'canceled_at' => now(),
-        'status'      => SubscriptionStatus::Canceled->value,
-        'ends_at'     => now()->addDays(15),
+        'status' => SubscriptionStatus::Canceled->value,
+        'ends_at' => now()->addDays(15),
     ]);
 
-    expect($this->service->hasActiveSubscription($this->subscriber))->toBeFalse();
+    expect($this->service->hasActiveSubscription($this->subscriber))->toBeTrue();
 });

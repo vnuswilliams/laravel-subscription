@@ -22,13 +22,11 @@ Cette documentation est aussi [fourni en anglais](README.md).
 1. [Installation](#installation)
 1. [Configuration des plans en base](#configuration-des-plans-en-base)
 1. [Préparer le modèle souscripteur](#préparer-le-modèle-souscripteur)
-1. [Support Team / Multi-tenant](#support-team--multi-tenant)
-1. [Points d'entrée : trois façons d'utiliser le package](#points-dentrée--trois-façons-dutiliser-le-package)
+1. [Points d’entrée : trois façons d’utiliser le package](#points-dentrée--trois-façons-dutiliser-le-package)
 1. [Gestion des abonnements](#gestion-des-abonnements)
 1. [Features & Quotas](#features--quotas)
 1. [Cycle de vie & Période de grâce](#cycle-de-vie--période-de-grâce)
 1. [Middleware de protection des routes](#middleware-de-protection-des-routes)
-1. [Directives Blade](#directives-blade)
 1. [Événements Laravel](#événements-laravel)
 1. [Commande Artisan](#commande-artisan)
 1. [Recette complète : service applicatif](#recette-complète--service-applicatif)
@@ -184,89 +182,6 @@ C’est tout. Le trait expose automatiquement la relation `subscription()` et to
 
 -----
 
-## Support Team / Multi-tenant
-
-Dans de nombreuses applications SaaS, un seul **propriétaire d’équipe** paie l’abonnement, tandis que les autres membres en bénéficient sans avoir leur propre ligne d’abonnement active. Ce package supporte ce schéma nativement via un **résolveur de sujet** global.
-
-### Comment ça marche
-
-Le `SubscriptionManager` expose une méthode statique `resolveSubjectUsing()`. Lorsque configurée, chaque **opération de lecture** (vérification d’accès, consommation de quotas, consultation du solde) résout le "vrai porteur d’abonnement" via ce résolveur avant d’exécuter.
-
-**Aucune interface ni méthode n’est requise sur votre modèle Eloquent.** Le résolveur est simplement une Closure enregistrée une seule fois dans votre `AppServiceProvider`.
-
-### Configuration
-
-```php
-// App\Providers\AppServiceProvider::boot()
-
-use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
-use Vnuswilliams\Subscription\SubscriptionManager;
-
-public function boot(): void
-{
-    SubscriptionManager::resolveSubjectUsing(function (Model $model) {
-        return $model instanceof User
-            ? ($model->team?->owner ?? $model)
-            : $model;
-    });
-}
-```
-
-### Conséquences pratiques
-
-- `$membre->hasActiveSubscription()` → vérifie l’abonnement du **propriétaire**
-- `$membre->canConsume('max-employees', 1)` → vérifie le quota du **propriétaire**
-- `$membre->consume('max-employees', 1)` → consomme depuis le quota du **propriétaire**
-- `$membre->subscribeTo('pro')` → est refusé, car le membre ne possède pas l’abonnement mutualisé
-
-Tous les membres d’une équipe partagent le même pool de quotas puisqu’ils résolvent tous vers l’abonnement du propriétaire.
-
-### Règles clés
-
-- **La délégation est inconditionnelle.** Pour tout membre rattaché à une équipe dont il n’est pas le propriétaire, les opérations de lecture déléguent toujours vers le propriétaire — même si le membre possède son propre abonnement personnel. Une seule source de vérité par équipe : le propriétaire.
-- **Si l’utilisateur EST le propriétaire**, `$model->team->owner` retourne `$model` lui-même — aucun cas particulier à coder.
-- **Les opérations de gestion d’abonnement (`subscribeTo`, `switchTo`, `cancel`, `suppress`, `renew`) sont réservées au propriétaire.** Lorsque le résolveur renvoie un propriétaire différent, le package lève `SubscriptionManagementNotAllowedException` au lieu de créer ou de modifier un abonnement personnel du membre.
-- **Utilisez `$user->canManageSubscription()` ou `Subscription::canManageSubscription($user)`** pour n’afficher les actions de gestion qu’au propriétaire autorisé.
-- **L’abonnement personnel d’un membre reste invisible** tant qu’il est membre non-propriétaire d’une équipe. Il redevient actif s’il quitte l’équipe ou en devient le propriétaire.
-
-### Protéger les routes de gestion d’abonnement
-
-Le middleware `subscription-owner` est enregistré automatiquement. Son alias par défaut peut être modifié dans le fichier publié `config/subscriptions.php` :
-
-```php
-'middleware' => [
-    'alias' => 'subscribed',
-    'owner_alias' => 'subscription-owner',
-],
-```
-
-Publiez la configuration si vous souhaitez personnaliser cet alias :
-
-```bash
-php artisan vendor:publish --tag=subscription-config
-```
-
-Ajoutez le middleware à toutes les routes qui créent, modifient, renouvellent, annulent ou suppriment un abonnement. Placez le middleware Laravel `auth` avant lui afin qu’un utilisateur authentifié soit disponible dans la requête :
-
-```php
-use Illuminate\Support\Facades\Route;
-
-Route::middleware(['auth', 'subscription-owner'])->group(function () {
-    Route::post('/billing/subscribe', SubscribeController::class);
-    Route::patch('/billing/plan', SwitchPlanController::class);
-    Route::post('/billing/cancel', CancelSubscriptionController::class);
-});
-```
-
-Un membre non-propriétaire reçoit une réponse HTTP `403`. Cette vérification complète la protection du gestionnaire, qui bloque également les appels réalisés hors HTTP, par exemple dans un job, une action, un listener ou un appel direct du trait.
-
-### Sans résolveur (compatibilité totale)
-
-Si vous n’appelez jamais `SubscriptionManager::resolveSubjectUsing(...)`, chaque méthode opère sur le modèle sur lequel elle est appelée — exactement comme avant. **Aucune rupture de rétrocompatibilité** pour les projets existants.
-
------
-
 ## Points d’entrée : trois façons d’utiliser le package
 
 Le package expose trois interfaces selon le contexte d’utilisation. Choisissez celle qui correspond à votre situation.
@@ -298,21 +213,6 @@ Subscription::balance($company, 'max-employees');
 ```
 
 Idéal dans les Controllers, les Actions, les Jobs ou les Listeners.
-
-Le trait fournit également des helpers pour l’utilisateur authentifié, afin d’éviter de répéter `auth()->user()` dans l’application :
-
-```php
-use App\Models\User;
-
-$user = User::currentUser();             // User|null
-$user = User::currentUserOrFail();       // User, ou AuthenticationException
-$isCurrent = $company->isCurrentUser();  // bool
-
-$plan = User::authenticatedPlan();     // Plan|null, plan du propriétaire si User est membre
-$plan = $user?->plan();                // Plan|null, plan effectif de cette instance
-```
-
-`currentUser()` retourne `null` si la requête n’est pas authentifiée ou si le modèle authentifié n’utilise pas ce trait. Utilisez `currentUserOrFail()` lorsque l’authentification est obligatoire. `plan()` retourne toujours le plan effectif de l’instance ; pour un membre non-propriétaire, il s’agit donc du plan du propriétaire de l’équipe. `authenticatedPlan()` est le helper direct lorsque vous avez seulement besoin du plan effectif de l’utilisateur connecté.
 
 ### 3. Via l’injection du SubscriptionManager (dans vos services)
 
@@ -609,72 +509,6 @@ En cas de refus, le middleware retourne :
 - **Redirect** vers `home` avec un message `error` en session sinon
 
 Pour personnaliser ce comportement, étendez `CheckSubscription` et rebindez-le dans votre `AppServiceProvider`.
-
------
-
-## Directives Blade
-
-Le package enregistre des directives Blade conditionnelles personnalisées dans son `ServiceProvider`. Elles bénéficient automatiquement du résolveur de sujet (support team) puisqu’elles appellent les méthodes de lecture du `SubscriptionManager` en interne.
-
-### Directives disponibles
-
-| Directive | Paramètres | Méthode équivalente |
-|---|---|---|
-| `@hasSubscription` | `(?Model $subscriber)` | `hasActiveSubscription()` |
-| `@canConsume($feature, $amount)` | `(string $feature, int $amount, ?Model $subscriber)` | `canConsume()` |
-| `@subscribedTo($planSlug)` | `(string $planSlug, ?Model $subscriber)` | `currentPlan()->slug === $planSlug` |
-| `@onTrial` | `(?Model $subscriber)` | `subscription->isOnTrial()` |
-| `@onGracePeriod` | `(?Model $subscriber)` | `subscription->isOnGracePeriod()` |
-| `@subscriptionCanceled` | `(?Model $subscriber)` | `subscription->isCanceled()` |
-| `@subscriptionExpired` | `(?Model $subscriber)` | `subscription->isExpired()` |
-
-Toutes les directives utilisent `Auth::user()` par défaut aucun subscriber n’est passé.
-
-### Exemples d’utilisation
-
-```blade
-@hasSubscription
-    <p>Bienvenue, vous avez accès au tableau de bord.</p>
-@else
-    <p>Abonnez-vous pour accéder à cette fonctionnalité.</p>
-@endhasSubscription
-
-@canConsume('max-employees')
-    <button>Ajouter un employé</button>
-@else
-    <p>Quota atteint — passez à un plan supérieur.</p>
-@endcanConsume
-
-@subscribedTo('pro')
-    <span class="badge">Plan Pro</span>
-@endsubscribedTo
-
-@onTrial
-    <div class="alert alert-info">Vous êtes en essai gratuit.</div>
-@endonTrial
-
-@onGracePeriod
-    <div class="alert alert-warning">
-        Votre abonnement a expiré, réglez votre paiement avant la fin de la période de grâce.
-    </div>
-@endonGracePeriod
-
-@subscriptionCanceled
-    <div class="alert alert-warning">
-        Votre abonnement a été résilié. L’accès prendra fin le {{ auth()->user()->subscription->ends_at->format('d/m/Y') }}.
-    </div>
-@endsubscriptionCanceled
-```
-
-### Surcharge du subscriber
-
-Toutes les directives acceptent un modèle subscriber optionnel comme premier paramètre. C’est utile pour les pages admin où vous affichez les informations d’abonnement d’un autre utilisateur :
-
-```blade
-@hasSubscription($team->owner)
-    <p>Cette équipe a un abonnement actif.</p>
-@endhasSubscription
-```
 
 -----
 

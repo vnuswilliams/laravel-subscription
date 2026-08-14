@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\File;
+use Vnuswilliams\Subscription\Tests\TestCase;
+
+uses(TestCase::class);
 
 it('regenerates the published configuration and package migrations', function (): void {
     File::ensureDirectoryExists(config_path());
@@ -10,8 +13,8 @@ it('regenerates the published configuration and package migrations', function ()
 
     File::put(config_path('subscriptions.php'), '<?php return [\'stale\' => true];');
 
-    foreach (File::files(__DIR__ . '/../../database/migrations') as $migration) {
-        File::put(database_path('migrations/' . $migration->getFilename()), '<?php // stale migration');
+    foreach (File::files(__DIR__.'/../../database/migrations') as $migration) {
+        File::put(database_path('migrations/'.$migration->getFilename()), '<?php // stale migration');
     }
 
     $this->artisan('subscription:install')
@@ -19,10 +22,10 @@ it('regenerates the published configuration and package migrations', function ()
         ->assertSuccessful();
 
     expect(File::get(config_path('subscriptions.php')))
-        ->toBe(File::get(__DIR__ . '/../../config/subscriptions.php'));
+        ->toBe(File::get(__DIR__.'/../../config/subscriptions.php'));
 
-    foreach (File::files(__DIR__ . '/../../database/migrations') as $migration) {
-        expect(File::get(database_path('migrations/' . $migration->getFilename())))
+    foreach (File::files(__DIR__.'/../../database/migrations') as $migration) {
+        expect(File::get(database_path('migrations/'.$migration->getFilename())))
             ->toBe(File::get($migration->getPathname()));
     }
 });

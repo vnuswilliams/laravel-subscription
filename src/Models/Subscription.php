@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Vnuswilliams\Subscription\Enums\SubscriptionStatus;
 use Vnuswilliams\Subscription\Events\SubscriptionCanceled;
 use Vnuswilliams\Subscription\Events\SubscriptionExpired;
-use Vnuswilliams\Subscription\SubscriptionManager;
 
 final class Subscription extends Model
 {
@@ -102,7 +101,14 @@ final class Subscription extends Model
             return false;
         }
 
-        return $this->isActive() || $this->isOnTrial() || $this->isOnGracePeriod();
+        $isCanceledWithAccess = $this->isCanceled()
+            && $this->ends_at !== null
+            && Carbon::parse($this->ends_at)->isFuture();
+
+        return $this->isActive()
+            || $this->isOnTrial()
+            || $this->isOnGracePeriod()
+            || $isCanceledWithAccess;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -114,8 +120,6 @@ final class Subscription extends Model
      */
     public function cancel(): static
     {
-        $this->ensureSubscriberCanManageSubscription();
-
         $this->update([
             'canceled_at' => now(),
             'status' => SubscriptionStatus::Canceled->value,
@@ -131,8 +135,6 @@ final class Subscription extends Model
      */
     public function suppress(): static
     {
-        $this->ensureSubscriberCanManageSubscription();
-
         $this->update([
             'suppressed_at' => now(),
             'status' => SubscriptionStatus::Expired->value,
@@ -148,8 +150,6 @@ final class Subscription extends Model
      */
     public function renew(): static
     {
-        $this->ensureSubscriberCanManageSubscription();
-
         $plan = $this->plan;
         $endsAt = $plan->expiresAt(now());
 
@@ -165,20 +165,6 @@ final class Subscription extends Model
         ]);
 
         return $this;
-    }
-
-    /**
-     * @throws \Vnuswilliams\Subscription\Exceptions\SubscriptionManagementNotAllowedException
-     */
-    private function ensureSubscriberCanManageSubscription(): void
-    {
-        $subscriber = $this->subscriber;
-
-        if (! $subscriber instanceof Model) {
-            return;
-        }
-
-        SubscriptionManager::ensureCanManageSubscriptionFor($subscriber);
     }
 
     /**
