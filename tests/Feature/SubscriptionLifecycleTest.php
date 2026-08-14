@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Carbon\Carbon;
+use Illuminate\Support\Facades\Event;
 use Vnuswilliams\Subscription\Enums\SubscriptionStatus;
 use Vnuswilliams\Subscription\Events\SubscriptionEnteredGracePeriod;
 use Vnuswilliams\Subscription\Events\SubscriptionExpired;
@@ -10,7 +10,6 @@ use Vnuswilliams\Subscription\Models\Plan;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
 use Vnuswilliams\Subscription\Tests\FakeSubscriber;
 use Vnuswilliams\Subscription\Tests\TestCase;
-use Illuminate\Support\Facades\Event;
 
 uses(TestCase::class);
 
@@ -21,17 +20,18 @@ beforeEach(function (): void {
     });
 
     $this->plan = Plan::create([
-        'name'             => 'Pro',
-        'slug'             => 'pro',
+        'name' => 'Pro',
+        'slug' => 'pro',
+        'price' => 19.99,
         'periodicity_type' => 'month',
-        'periodicity'      => 1,
-        'trial_days'       => 0,
-        'grace_days'       => 7,
-        'is_active'        => true,
+        'periodicity' => 1,
+        'trial_days' => 0,
+        'grace_days' => 7,
+        'is_active' => true,
     ]);
 
     $this->subscriber = FakeSubscriber::create([]);
-    $this->service    = app(SubscriptionService::class);
+    $this->service = app(SubscriptionService::class);
 });
 
 it('transitions active subscription to grace period when ends_at is past', function (): void {
@@ -61,9 +61,9 @@ it('artisan command expires subscriptions past grace', function (): void {
 
     $sub = $this->service->subscribeTo($this->subscriber, $this->plan);
     $sub->update([
-        'ends_at'       => now()->subDays(10),
+        'ends_at' => now()->subDays(10),
         'grace_ends_at' => now()->subDays(3),
-        'status'        => SubscriptionStatus::OnGracePeriod->value,
+        'status' => SubscriptionStatus::OnGracePeriod->value,
     ]);
 
     $this->artisan('subscription:check-lifecycle')->assertSuccessful();

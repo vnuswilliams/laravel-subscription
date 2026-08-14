@@ -18,26 +18,27 @@ beforeEach(function (): void {
     });
 
     $this->plan = Plan::create([
-        'name'             => 'Pro',
-        'slug'             => 'pro',
+        'name' => 'Pro',
+        'slug' => 'pro',
+        'price' => 19.99,
         'periodicity_type' => 'month',
-        'periodicity'      => 1,
-        'trial_days'       => 0,
-        'grace_days'       => 0,
-        'is_active'        => true,
+        'periodicity' => 1,
+        'trial_days' => 0,
+        'grace_days' => 0,
+        'is_active' => true,
     ]);
 
     $this->plan->features()->create([
-        'slug'    => 'max-employees',
-        'name'    => 'Max Employees',
-        'type'    => FeatureType::Consumable->value,
+        'slug' => 'max-employees',
+        'name' => 'Max Employees',
+        'type' => FeatureType::Consumable->value,
         'charges' => 10,
     ]);
 
     $this->plan->features()->create([
-        'slug'    => 'export-pdf',
-        'name'    => 'Export PDF',
-        'type'    => FeatureType::Boolean->value,
+        'slug' => 'export-pdf',
+        'name' => 'Export PDF',
+        'type' => FeatureType::Boolean->value,
         'charges' => null,
     ]);
 

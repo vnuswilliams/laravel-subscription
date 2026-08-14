@@ -17,13 +17,14 @@ beforeEach(function (): void {
     });
 
     $this->plan = Plan::create([
-        'name'             => 'Pro',
-        'slug'             => 'pro',
+        'name' => 'Pro',
+        'slug' => 'pro',
+        'price' => 19.99,
         'periodicity_type' => 'month',
-        'periodicity'      => 1,
-        'trial_days'       => 0,
-        'grace_days'       => 0,
-        'is_active'        => true,
+        'periodicity' => 1,
+        'trial_days' => 0,
+        'grace_days' => 0,
+        'is_active' => true,
     ]);
 
     $this->subscriber = FakeSubscriber::create([]);
