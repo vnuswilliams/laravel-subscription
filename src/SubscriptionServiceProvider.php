@@ -8,6 +8,7 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Vnuswilliams\Subscription\Console\Commands\CheckSubscriptionLifecycle;
 use Vnuswilliams\Subscription\Console\Commands\InstallSubscriptionPackage;
+use Vnuswilliams\Subscription\Contracts\SubscriberResolver;
 use Vnuswilliams\Subscription\Http\Middleware\CheckSubscription;
 use Vnuswilliams\Subscription\Services\FeatureService;
 use Vnuswilliams\Subscription\Services\SubscriptionService;
@@ -24,6 +25,10 @@ final class SubscriptionServiceProvider extends ServiceProvider
         // Services internes (logique métier)
         $this->app->singleton(SubscriptionService::class);
         $this->app->singleton(FeatureService::class);
+
+        // Resolver par défaut. L'application consommatrice peut remplacer ce
+        // binding dans son propre ServiceProvider (ex: Company au lieu de User).
+        $this->app->bind(SubscriberResolver::class, AuthSubscriberResolver::class);
 
         // Manager : point d'entrée public du package (Facade + injection)
         $this->app->singleton(SubscriptionManager::class, function ($app): SubscriptionManager {
