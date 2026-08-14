@@ -242,7 +242,7 @@ public function boot(): void
 - `$member->consume('max-employees', 1)` → consumes from the **owner's** quota
 - `$member->subscribeTo('pro')` → writes on the **member** directly (write operations are never resolved)
 
-The behavior is identical whether you call the facade (`Subscription::consume($member, ...)`), inject `SubscriptionManager`, or use the trait directly (`$member->consume(...)`). All team members therefore share the same quota pool, and every usage row is attached to the owner's subscription.
+All team members share the same quota pool since they all resolve to the owner's subscription.
 
 ### Key rules
 
