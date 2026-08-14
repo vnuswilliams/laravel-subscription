@@ -221,6 +221,75 @@ The binding is intentionally overridable. An application that subscribes a `Comp
 $this->app->bind(SubscriberResolver::class, CompanySubscriberResolver::class);
 ```
 
+### Advanced custom resolver examples
+
+A custom resolver can use any application service, such as a tenant context populated by middleware. The resolver should return the Eloquent model that uses `HasSubscriptions`, or `null` when no subscriber is available:
+
+```php
+namespace App\Subscriptions;
+
+use App\Models\Company;
+use App\Support\TenantContext;
+use Illuminate\Database\Eloquent\Model;
+use Vnuswilliams\Subscription\Contracts\SubscriberResolver;
+
+final class CompanySubscriberResolver implements SubscriberResolver
+{
+    public function __construct(
+        private readonly TenantContext $tenantContext,
+    ) {}
+
+    public function resolve(): ?Model
+    {
+        $companyId = $this->tenantContext->id();
+
+        return $companyId === null
+            ? null
+            : Company::query()->find($companyId);
+    }
+}
+```
+
+Register the resolver in the application provider. Laravel will resolve its constructor dependencies from the container:
+
+```php
+// app/Providers/AppServiceProvider.php
+use App\Subscriptions\CompanySubscriberResolver;
+use Vnuswilliams\Subscription\Contracts\SubscriberResolver;
+
+public function register(): void
+{
+    $this->app->bind(SubscriberResolver::class, CompanySubscriberResolver::class);
+}
+```
+
+The same pattern works when the current company is derived from the authenticated user, a route parameter, a request header, or a tenant package. Keep the resolver focused on identifying the subscriber; authorization and tenant access checks should remain in the application layer:
+
+```php
+public function resolve(): ?Model
+{
+    $user = auth()->user();
+
+    return $user?->currentCompany;
+}
+```
+
+For Artisan commands, queues, scheduled tasks, and tests where there is no HTTP authentication context, pass the subscriber explicitly to the global helper instead of relying on the default resolver:
+
+```php
+currentPlan($company);
+consume('max-employees', 1, subscriber: $company);
+subscribeTo('pro', subscriber: $company);
+```
+
+A resolver can also be overridden only in a test or a scoped application context:
+
+```php
+$this->app->bind(SubscriberResolver::class, fn () => new FixedCompanyResolver($company));
+
+expect(currentPlan()?->is($company->currentPlan()))->toBeTrue();
+```
+
 The helpers validate that the resolved model uses `HasSubscriptions`. Pass a model as the final argument to bypass the resolver:
 
 ```php
