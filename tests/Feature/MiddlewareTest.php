@@ -21,7 +21,6 @@ beforeEach(function (): void {
         'slug'             => 'pro',
         'periodicity_type' => 'month',
         'periodicity'      => 1,
-        'price'            => 19.99,
         'trial_days'       => 0,
         'grace_days'       => 0,
         'is_active'        => true,

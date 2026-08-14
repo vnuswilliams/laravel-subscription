@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Vnuswilliams\Subscription;
 
-use Closure;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Vnuswilliams\Subscription\Models\Plan;
@@ -21,43 +20,13 @@ use Vnuswilliams\Subscription\Services\SubscriptionService;
  */
 final class SubscriptionManager
 {
-    protected static ?Closure $subjectResolver = null;
-
     public function __construct(
         private readonly SubscriptionService $subscriptions,
         private readonly FeatureService      $features,
     ) {}
 
-    /**
-     * Permet à l'application hôte de définir comment résoudre
-     * le "vrai" porteur d'abonnement pour un modèle donné.
-     */
-    public static function resolveSubjectUsing(Closure $resolver): void
-    {
-        static::$subjectResolver = $resolver;
-    }
-
-    /**
-     * Reset the resolver (useful for tests).
-     */
-    public static function flushSubjectResolver(): void
-    {
-        static::$subjectResolver = null;
-    }
-
-    /**
-     * Résout le sujet effectif porteur d'abonnement.
-     * Si aucun resolver n'est configuré, retourne le modèle tel quel.
-     */
-    protected function resolveSubject(Model $model): Model
-    {
-        return static::$subjectResolver
-            ? (static::$subjectResolver)($model)
-            : $model;
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
-    //  Souscription / cycle de vie (WRITE — pas de résolution)
+    //  Souscription / cycle de vie
     // ─────────────────────────────────────────────────────────────────────────
 
     public function subscribeTo(Model $subscriber, string|Plan $plan, ?Carbon $expiration = null, bool $immediately = true, int|float|string|null $price = null): Subscription
@@ -86,27 +55,21 @@ final class SubscriptionManager
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  État de l'abonnement (READ — résolution du sujet)
+    //  État de l'abonnement
     // ─────────────────────────────────────────────────────────────────────────
 
     public function hasActiveSubscription(Model $subscriber): bool
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->subscriptions->hasActiveSubscription($subscriber);
     }
 
     public function currentPlan(Model $subscriber): ?Plan
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->subscriptions->currentPlan($subscriber);
     }
 
     public function expiresAt(Model $subscriber): ?Carbon
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->subscriptions->expiresAt($subscriber);
     }
 
@@ -116,7 +79,7 @@ final class SubscriptionManager
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    //  Features & Quotas (READ + CONSUME — résolution du sujet)
+    //  Features & Quotas
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
@@ -125,8 +88,6 @@ final class SubscriptionManager
      */
     public function canConsume(Model $subscriber, string $featureSlug, int $amount = 1): bool
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->features->canConsume($subscriber, $featureSlug, $amount);
     }
 
@@ -135,8 +96,6 @@ final class SubscriptionManager
      */
     public function consume(Model $subscriber, string $featureSlug, int $amount = 1): SubscriptionUsage
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->features->consume($subscriber, $featureSlug, $amount);
     }
 
@@ -145,8 +104,6 @@ final class SubscriptionManager
      */
     public function release(Model $subscriber, string $featureSlug, int $amount = 1): SubscriptionUsage
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->features->release($subscriber, $featureSlug, $amount);
     }
 
@@ -155,8 +112,6 @@ final class SubscriptionManager
      */
     public function balance(Model $subscriber, string $featureSlug): int
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->features->balance($subscriber, $featureSlug);
     }
 
@@ -165,8 +120,6 @@ final class SubscriptionManager
      */
     public function totalCharges(Model $subscriber, string $featureSlug): int
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->features->totalCharges($subscriber, $featureSlug);
     }
 
@@ -175,8 +128,6 @@ final class SubscriptionManager
      */
     public function usedCharges(Model $subscriber, string $featureSlug): int
     {
-        $subscriber = $this->resolveSubject($subscriber);
-
         return $this->features->usedCharges($subscriber, $featureSlug);
     }
 }

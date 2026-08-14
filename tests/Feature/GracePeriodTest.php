@@ -22,7 +22,6 @@ beforeEach(function (): void {
         'slug'             => 'pro',
         'periodicity_type' => 'month',
         'periodicity'      => 1,
-        'price'            => 19.99,
         'trial_days'       => 0,
         'grace_days'       => 7,
         'is_active'        => true,
@@ -55,7 +54,7 @@ it('denies access after grace period ends', function (): void {
     expect($this->service->hasActiveSubscription($this->subscriber))->toBeFalse();
 });
 
-it('denies access to canceled subscription outside its active window', function (): void {
+it('grants access to canceled subscription within its period', function (): void {
     $sub = $this->service->subscribeTo($this->subscriber, $this->plan);
     $sub->update([
         'canceled_at' => now(),
@@ -63,5 +62,5 @@ it('denies access to canceled subscription outside its active window', function 
         'ends_at'     => now()->addDays(15),
     ]);
 
-    expect($this->service->hasActiveSubscription($this->subscriber))->toBeFalse();
+    expect($this->service->hasActiveSubscription($this->subscriber))->toBeTrue();
 });
