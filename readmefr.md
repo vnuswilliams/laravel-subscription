@@ -182,41 +182,6 @@ C’est tout. Le trait expose automatiquement la relation `subscription()` et to
 
 -----
 
-## Résolveur de subscriber et helpers globaux
-
-Les helpers globaux résolvent le subscriber via le contrat `SubscriberResolver`. L’implémentation par défaut, `AuthSubscriberResolver`, retourne `auth()->user()`.
-
-```php
-use Vnuswilliams\Subscription\Contracts\SubscriberResolver;
-use Vnuswilliams\Subscription\Resolvers\AuthSubscriberResolver;
-
-// Enregistré par le package :
-$this->app->bind(SubscriberResolver::class, AuthSubscriberResolver::class);
-```
-
-Ce binding est volontairement remplaçable. Une application qui abonne une `Company` plutôt que l’utilisateur authentifié peut le remplacer dans son propre ServiceProvider :
-
-```php
-$this->app->bind(SubscriberResolver::class, CompanySubscriberResolver::class);
-```
-
-Les helpers vérifient que le modèle résolu utilise `HasSubscriptions`. Pour contourner le resolver, passez explicitement le modèle en dernier paramètre :
-
-```php
-subscribeTo('pro');
-currentPlan();
-hasActiveSubscription();
-canConsume('max-employees', 1);
-
-currentPlan($company);
-canConsume('max-employees', 1, $company);
-subscribeTo('pro', subscriber: $company);
-```
-
-L’ensemble des helpers reprend les méthodes publiques du trait : `subscribeTo`, `switchTo`, `renewSubscription`, `hasActiveSubscription`, `currentPlan`, `subscriptionExpiresAt`, `canConsume`, `consume`, `release`, `balance`, `totalCharges` et `usedCharges`. Si aucun subscriber ne peut être résolu, ou si le modèle résolu n’utilise pas `HasSubscriptions`, le package lève `InvalidSubscriberException` avec un message explicite.
-
------
-
 ## Points d’entrée : trois façons d’utiliser le package
 
 Le package expose trois interfaces selon le contexte d’utilisation. Choisissez celle qui correspond à votre situation.
